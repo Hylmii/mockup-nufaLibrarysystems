@@ -18,17 +18,29 @@ const styles = {
 interface ToastStackProps {
   toasts: ToastT[];
   onDismiss: (id: string) => void;
+  /** Halaman admin: geser ke kanan sidebar (248px) agar menu tidak tertutup. */
+  besideSidebar?: boolean;
 }
 
-export function ToastStack({ toasts, onDismiss }: ToastStackProps) {
+/** Batas notifikasi yang tampil bersamaan (yang terbaru) agar tumpukan tidak menutupi layar. */
+const MAX_VISIBLE = 3;
+
+export function ToastStack({ toasts, onDismiss, besideSidebar = false }: ToastStackProps) {
   if (toasts.length === 0) return null;
+  // Di kiri bawah: tombol aksi di aplikasi ini rata kanan (Konfirmasi, Kembalikan, footer
+  // dialog, pagination) sehingga tidak tertutup notifikasi. Kontainer meneruskan klik;
+  // hanya kartu notifikasinya yang menangkap klik.
   return (
-    <div className="fixed bottom-4 right-4 z-[60] flex flex-col gap-2 max-w-sm">
-      {toasts.map((toast) => (
+    <div
+      className={`fixed bottom-4 left-4 right-4 sm:right-auto z-[60] flex flex-col gap-2 sm:w-96 pointer-events-none ${
+        besideSidebar ? 'lg:left-[264px]' : ''
+      }`}
+    >
+      {toasts.slice(-MAX_VISIBLE).map((toast) => (
         <div
           key={toast.id}
-          className={`flex items-start gap-3 p-4 rounded-lg border shadow-elevated animate-toast-in ${styles[toast.type]}`}
-          role="alert"
+          className={`pointer-events-auto flex items-start gap-3 p-4 rounded-lg border shadow-elevated animate-toast-in ${styles[toast.type]}`}
+          role={toast.type === 'error' ? 'alert' : 'status'}
         >
           <span className="flex-shrink-0 mt-0.5">{icons[toast.type]}</span>
           <div className="flex-1 min-w-0">

@@ -19,7 +19,6 @@ interface AdminPageProps {
   activeUnit: Unit;
   route: string;
   navigate: (path: string) => void;
-  onChangeRole: (r: Role) => void;
   onLogout: () => void;
   notify: Notify;
 }
@@ -30,7 +29,7 @@ const IMPORT_HISTORY = [
   { file: 'import_anggota_sma_2024.csv', rows: 3, status: 'perlu koreksi', date: '7 Sep 2026' },
 ];
 
-export function AdministrasiPage({ role, activeUnit, route, navigate, onChangeRole, onLogout, notify }: AdminPageProps) {
+export function AdministrasiPage({ role, activeUnit, route, navigate, onLogout, notify }: AdminPageProps) {
   const [tab, setTab] = useState('import');
   const categories = useMemo(() => {
     const map = new Map<string, number>();
@@ -47,7 +46,7 @@ export function AdministrasiPage({ role, activeUnit, route, navigate, onChangeRo
   return (
     <AdminLayout
       role={role} activeUnit={activeUnit} route={route} navigate={navigate}
-      onChangeRole={onChangeRole} onLogout={onLogout}
+      onLogout={onLogout}
       pageTitle="Administrasi"
       breadcrumbs={[{ label: 'Pustakawan' }, { label: 'Administrasi' }]}
     >

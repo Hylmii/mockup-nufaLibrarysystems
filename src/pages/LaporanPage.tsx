@@ -19,7 +19,6 @@ interface AdminPageProps {
   activeUnit: Unit;
   route: string;
   navigate: (path: string) => void;
-  onChangeRole: (r: Role) => void;
   onLogout: () => void;
   notify: Notify;
 }
@@ -32,7 +31,7 @@ const TOP_BOOKS = [
   { book: BOOKS[1], count: 24 },
 ];
 
-export function LaporanPage({ role, activeUnit, route, navigate, onChangeRole, onLogout, notify }: AdminPageProps) {
+export function LaporanPage({ role, activeUnit, route, navigate, onLogout, notify }: AdminPageProps) {
   const [period, setPeriod] = useState('bulan-ini');
   const [unit, setUnit] = useState('SEMUA');
 
@@ -44,7 +43,7 @@ export function LaporanPage({ role, activeUnit, route, navigate, onChangeRole, o
   return (
     <AdminLayout
       role={role} activeUnit={activeUnit} route={route} navigate={navigate}
-      onChangeRole={onChangeRole} onLogout={onLogout}
+      onLogout={onLogout}
       pageTitle="Laporan"
       breadcrumbs={[{ label: 'Pustakawan' }, { label: 'Laporan' }]}
       pageActions={

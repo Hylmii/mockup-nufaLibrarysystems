@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Lock, User as UserIcon, Eye, EyeOff, Info, BookOpen } from 'lucide-react';
+import { Lock, User as UserIcon, Eye, EyeOff, Info } from 'lucide-react';
 import { NufaLogo } from '@/components/NufaLogo';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
@@ -10,8 +10,28 @@ interface LoginProps {
   notify: (type: 'success' | 'warning' | 'error' | 'info', title: string, message?: string) => void;
 }
 
-export function LoginPage({ onLogin }: LoginProps) {
-  const [userId, setUserId] = useState('');
+const REMEMBER_KEY = 'nufa.lastUserId';
+
+// localStorage bisa tidak tersedia (mode privat / diblokir) — jangan sampai login gagal karenanya.
+function readRememberedId(): string {
+  try {
+    return localStorage.getItem(REMEMBER_KEY) ?? '';
+  } catch {
+    return '';
+  }
+}
+
+function writeRememberedId(id: string | null) {
+  try {
+    if (id) localStorage.setItem(REMEMBER_KEY, id);
+    else localStorage.removeItem(REMEMBER_KEY);
+  } catch {
+    // abaikan
+  }
+}
+
+export function LoginPage({ onLogin, notify }: LoginProps) {
+  const [userId, setUserId] = useState(readRememberedId);
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [remember, setRemember] = useState(true);
@@ -27,6 +47,7 @@ export function LoginPage({ onLogin }: LoginProps) {
       return;
     }
 
+    writeRememberedId(remember ? userId.trim() : null);
     setLoading(true);
     setTimeout(() => {
       setLoading(false);
@@ -106,7 +127,7 @@ export function LoginPage({ onLogin }: LoginProps) {
                 placeholder="contoh: pustakawan.sd"
                 icon={<UserIcon size={18} />}
                 autoComplete="username"
-                autoFocus
+                autoFocus={!userId}
               />
 
               <div>
@@ -117,7 +138,9 @@ export function LoginPage({ onLogin }: LoginProps) {
                   <button
                     type="button"
                     className="text-xs text-action hover:underline"
-                    onClick={() => undefined}
+                    onClick={() =>
+                      notify('info', 'Atur ulang kata sandi', 'Hubungi pustakawan unit atau admin sekolah untuk mengatur ulang kata sandi.')
+                    }
                   >
                     Lupa kata sandi?
                   </button>
@@ -126,6 +149,8 @@ export function LoginPage({ onLogin }: LoginProps) {
                   <Lock size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-muted pointer-events-none" />
                   <input
                     id="password"
+                    autoFocus={!!userId}
+                    autoComplete="current-password"
                     type={showPassword ? 'text' : 'password'}
                     name="password"
                     value={password}
@@ -199,6 +224,7 @@ export function LoginPage({ onLogin }: LoginProps) {
 function DemoRoleButton({ label, onClick }: { label: string; onClick: () => void }) {
   return (
     <button
+      type="button"
       onClick={onClick}
       className="px-3 py-2 text-sm font-medium text-navy border border-line rounded-md hover:bg-canvas hover:border-navy-200 transition-all"
     >

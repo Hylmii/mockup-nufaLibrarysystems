@@ -20,14 +20,13 @@ interface AdminPageProps {
   activeUnit: Unit;
   route: string;
   navigate: (path: string) => void;
-  onChangeRole: (r: Role) => void;
   onLogout: () => void;
   notify: Notify;
 }
 
-const PAGE_SIZE = 6;
+const PAGE_SIZE = 20;
 
-export function KoleksiPage({ role, activeUnit, route, navigate, onChangeRole, onLogout, notify }: AdminPageProps) {
+export function KoleksiPage({ role, activeUnit, route, navigate, onLogout, notify }: AdminPageProps) {
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('SEMUA');
   const [unit, setUnit] = useState('SEMUA');
@@ -67,7 +66,7 @@ export function KoleksiPage({ role, activeUnit, route, navigate, onChangeRole, o
   return (
     <AdminLayout
       role={role} activeUnit={activeUnit} route={route} navigate={navigate}
-      onChangeRole={onChangeRole} onLogout={onLogout}
+      onLogout={onLogout}
       pageTitle="Koleksi"
       breadcrumbs={[{ label: 'Pustakawan' }, { label: 'Koleksi' }]}
       pageActions={

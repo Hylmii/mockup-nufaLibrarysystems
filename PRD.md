@@ -2,7 +2,7 @@
 
 **Product Requirements Document**
 Powered by IKODIO · Status dokumen: Draf untuk prototipe (mockup)
-Terakhir diperbarui: 12 September 2026
+Terakhir diperbarui: 6 Oktober 2026
 
 ---
 
@@ -134,7 +134,7 @@ Kode status: **✅ Terimplementasi (mockup)** · **🟡 Sebagian** · **⬜ Plac
 | AUTH-1 | Halaman login dengan ID pengguna & kata sandi | ✅ (tanpa validasi kata sandi) |
 | AUTH-2 | Penentuan peran dari pola ID (mengandung "yayasan/ketua", "siswa/guru", selain itu pustakawan) | ✅ |
 | AUTH-3 | Tombol demo untuk masuk cepat per peran | ✅ |
-| AUTH-4 | Pengalih peran ("Mode Demo") di menu profil | ✅ |
+| AUTH-4 | Pengalih peran ("Mode Demo") di menu profil; peran diturunkan dari rute sehingga tetap benar setelah refresh | ✅ |
 | AUTH-5 | Autentikasi nyata + otorisasi/route guard | ⬜ |
 
 ### 7.2 OPAC (Siswa)
@@ -153,9 +153,9 @@ Kode status: **✅ Terimplementasi (mockup)** · **🟡 Sebagian** · **⬜ Plac
 | ID | Kebutuhan | Status |
 |----|-----------|--------|
 | SCAN-1 | Viewfinder simulasi + input barcode manual + contoh barcode | ✅ |
-| SCAN-2 | Temukan buku via `findBookByBarcode`, tampilkan hasil | ✅ |
+| SCAN-2 | Temukan eksemplar via `findCopyByBarcode`, tampilkan status & lokasi eksemplar yang dipindai | ✅ |
 | SCAN-3 | Aksi Lihat Detail → `/buku/:id` | ✅ |
-| SCAN-4 | Aksi Pinjam → `/mandiri?mode=pinjam&book=:id` | ✅ |
+| SCAN-4 | Aksi Pinjam → `/mandiri?mode=pinjam&barcode=:barcode` (hanya aktif bila eksemplar tsb. tersedia) | ✅ |
 | SCAN-5 | Integrasi pemindai kamera/HID nyata | ⬜ |
 
 ### 7.4 Layanan Mandiri (Kios)
@@ -166,7 +166,7 @@ Kode status: **✅ Terimplementasi (mockup)** · **🟡 Sebagian** · **⬜ Plac
 | SELF-3 | Tolak anggota berstatus diblokir | ✅ |
 | SELF-4 | Hitung jatuh tempo +7 hari | ✅ |
 | SELF-5 | Kembalikan: scan buku → tampilkan **lokasi rak** (Unit/Rak/No. Panggil) | ✅ |
-| SELF-6 | Pra-isi buku dari daftar Pinjaman Saya (`?book=`) | ✅ |
+| SELF-6 | Pra-isi buku dari daftar Pinjaman Saya (`?barcode=`); pemindaian ulang di sesi yang sama tidak dicatat dua kali | ✅ |
 | SELF-7 | Mutasi status eksemplar & catatan transaksi permanen | ⬜ (simulasi) |
 
 ### 7.5 Modul Pustakawan
@@ -189,7 +189,7 @@ Kode status: **✅ Terimplementasi (mockup)** · **🟡 Sebagian** · **⬜ Plac
 | YAY-3 | Daftar "Perlu Perhatian" + drawer detail | ✅ |
 | YAY-4 | Ekspor laporan | ✅ (simulasi/toast) |
 | YAY-5 | Filter periode & unit benar-benar memfilter data | ⬜ (belum berpengaruh) |
-| YAY-6 | Sub-halaman: Perbandingan Unit, Koleksi, Sirkulasi, Stock Opname, Laporan | ⬜ (fallback ke Ringkasan) |
+| YAY-6 | Sub-halaman: Perbandingan Unit, Koleksi, Sirkulasi, Stock Opname, Laporan | ⬜ (fallback ke Ringkasan; menu bertanda "Segera") |
 
 ### 7.7 Notifikasi
 | ID | Kebutuhan | Status |
@@ -227,8 +227,8 @@ Definisi tipe berada di `src/types.ts`; data contoh di `src/lib/data.ts`.
 ### 9.2 Entitas Inti
 | Entitas | Field kunci |
 |---------|-------------|
-| **Book** | id, barcode, title, author, publisher, year, isbn, category, language, synopsis, coverHue, copies[], popular?, isNew? |
-| **BookCopy** | unit, shelf, callNumber, status, copyNumber |
+| **Book** | id, title, author, publisher, year, isbn, category, language, synopsis, coverHue, copies[], popular?, isNew? |
+| **BookCopy** | barcode, unit, shelf, callNumber, status, copyNumber |
 | **Member** | id, name, unit, status (`aktif/diblokir/menunggu`), activeLoans, overdueCount, restriction?, avatarHue, joinedDate, category (`siswa/guru/staf`) |
 | **ScannedBook** | barcode, title, status, dueDate? |
 | **AttentionItem** | id, text, severity, unit?, action |
@@ -237,14 +237,19 @@ Definisi tipe berada di `src/types.ts`; data contoh di `src/lib/data.ts`.
 
 ### 9.3 Relasi & Logika Penting
 - Sebuah **Book** memiliki banyak **BookCopy** yang tersebar di beberapa unit.
-- **Barcode buku** memuat prefiks unit (`BK-SD-…`, `BK-SMP-…`, `BK-SMA-…`). Prefiks ini
-  dipakai untuk menemukan eksemplar & **lokasi rak** yang tepat saat pengembalian
-  (fungsi `resolveCopy`).
+- **Barcode melekat pada tiap eksemplar** (bukan pada judul) dan memuat prefiks unit
+  (`BK-SD-…`, `BK-SMP-…`, `BK-SMA-…`). Memindai barcode langsung menunjuk satu eksemplar
+  fisik beserta status dan **lokasi raknya** — dipakai saat pinjam (validasi ketersediaan)
+  maupun kembali (petunjuk rak).
 - **Jatuh tempo** = tanggal pinjam + 7 hari (kebijakan default; dapat dikonfigurasi di Administrasi).
-- Helper pencarian: `findBookByBarcode`, `findMemberById` (case-insensitive, ter-trim).
+- Helper pencarian: `findCopyByBarcode` (→ `{ book, copy }`), `findBookByBarcode`, `findMemberById` (case-insensitive, ter-trim).
+- Tanggal disimpan sebagai kunci lokal `YYYY-MM-DD` (`toDateKey`), bukan UTC, agar jatuh tempo tidak bergeser sehari.
 
 ### 9.4 Data Simulasi (ringkas)
-8 judul buku, 5 anggota contoh, metrik yayasan (8.420 judul, 11.260 eksemplar, 1.846 anggota
+**1.008 judul buku** (±2.570 eksemplar ber-barcode unik, 22 kategori): 8 judul kurasi untuk
+skenario demo + 1.000 judul yang dibangkitkan otomatis secara deterministik oleh `src/lib/catalog.ts`
+(judul, penulis, ISBN-13 valid, nomor panggil DDC, eksemplar per unit), 5 anggota contoh, pinjaman aktif anggota demo
+(`MEMBER_LOANS`, selaras dengan status eksemplar & daftar tugas pustakawan), metrik yayasan (8.420 judul, 11.260 eksemplar, 1.846 anggota
 aktif, 326 dipinjam, 18 terlambat, 7 selisih), tren peminjaman 9 bulan, komposisi 6 kategori,
 dan daftar tugas pustakawan (stock opname, isu import, reservasi, jatuh tempo).
 
@@ -259,13 +264,13 @@ dan daftar tugas pustakawan (stock opname, isu import, reservasi, jatuh tempo).
 | **Styling** | Tailwind CSS 3 dengan token kustom (`tailwind.config.js`) |
 | **Ikon** | lucide-react |
 | **Routing** | Berbasis hash tanpa library (`useRoute` di `src/lib/store.ts`) — `window.location.hash` + event `hashchange` |
-| **State** | Lokal via hooks (`useRoute`, `useRoleState`, `useToasts`); prop drilling; tanpa store global |
+| **State** | Lokal via hooks (`useRoute`, `useToasts`); peran diturunkan dari rute (`roleFromRoute`); prop drilling; tanpa store global |
 | **Data** | Konstanta modul (`src/lib/data.ts`); tanpa backend/persistensi |
 | **Alias impor** | `@/` → `src/` |
 | **Skrip** | `dev`, `build`, `preview`, `lint`, `typecheck` |
 
-Catatan: `@supabase/supabase-js` terpasang tetapi belum digunakan — kandidat penyedia
-backend saat integrasi nyata.
+Catatan: belum ada dependensi backend. Supabase tetap kandidat penyedia backend dan akan
+dipasang saat integrasi nyata (Fase 1).
 
 ### 10.1 Peta Rute
 | Rute (hash) | Halaman | Peran |
@@ -273,7 +278,7 @@ backend saat integrasi nyata.
 | `/login`, `/` | LoginPage | Semua |
 | `/opac` (+ `?tab=`) | OpacPage (beranda/cari/kategori/pinjaman/reservasi/profil) | Siswa |
 | `/buku/:id` | BookDetailPage | Siswa |
-| `/mandiri` (+ `?mode=pinjam\|kembali&book=`) | SelfServicePage | Siswa |
+| `/mandiri` (+ `?mode=pinjam\|kembali&barcode=`) | SelfServicePage | Siswa |
 | `/yayasan*` | YayasanDashboard | Yayasan |
 | `/sirkulasi` | SirkulasiPage | Pustakawan |
 | `/pustakawan` | PustakawanDashboard | Pustakawan |
@@ -333,7 +338,7 @@ Prototipe ini **fungsional di sisi antarmuka** namun memakai data simulasi. Ring
 |---|--------------|
 | K1 | Tanpa backend/persistensi — refresh mereset state; transaksi tidak memutasi data. |
 | K2 | Login tidak memvalidasi kata sandi; tidak ada route guard (rute bisa diakses langsung). |
-| K3 | Peran awal selalu `pustakawan`; refresh di rute lain bisa membuat identitas sidebar tak sinkron. |
+| K3 | *(Teratasi)* Peran kini diturunkan dari rute sehingga identitas tetap sinkron setelah refresh. |
 | K4 | Sub-halaman modul **Yayasan** (Perbandingan Unit, Koleksi, Sirkulasi, Stock Opname, Laporan) belum dibuat — fallback ke Ringkasan. |
 | K5 | Filter periode/unit di dashboard Yayasan belum benar-benar memfilter data. |
 | K6 | Tab Pengembalian & Perpanjangan pada Sirkulasi pustakawan berbagi logika Peminjaman. |

@@ -18,7 +18,6 @@ interface AdminPageProps {
   activeUnit: Unit;
   route: string;
   navigate: (path: string) => void;
-  onChangeRole: (r: Role) => void;
   onLogout: () => void;
   notify: Notify;
 }
@@ -46,7 +45,7 @@ const STATUS_META: Record<Status, { label: string; variant: 'neutral' | 'info' |
 
 const TOTAL_ANGGARAN = 25000000;
 
-export function PengadaanPage({ role, activeUnit, route, navigate, onChangeRole, onLogout, notify }: AdminPageProps) {
+export function PengadaanPage({ role, activeUnit, route, navigate, onLogout, notify }: AdminPageProps) {
   const [addOpen, setAddOpen] = useState(() => route.includes('action=ajukan'));
   const [filter, setFilter] = useState<'SEMUA' | Status>('SEMUA');
 
@@ -72,7 +71,7 @@ export function PengadaanPage({ role, activeUnit, route, navigate, onChangeRole,
   return (
     <AdminLayout
       role={role} activeUnit={activeUnit} route={route} navigate={navigate}
-      onChangeRole={onChangeRole} onLogout={onLogout}
+      onLogout={onLogout}
       pageTitle="Pengadaan"
       breadcrumbs={[{ label: 'Pustakawan' }, { label: 'Pengadaan' }]}
       pageActions={

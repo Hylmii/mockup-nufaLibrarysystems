@@ -6,20 +6,19 @@ import {
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
-import { Badge, StatusBadge } from '@/components/ui/Badge';
+import { Badge } from '@/components/ui/Badge';
 import { Tabs } from '@/components/ui/Tabs';
 import { Dialog } from '@/components/ui/Dialog';
 import { EmptyState } from '@/components/ui/States';
-import { findBookByBarcode, findMemberById, MEMBERS } from '@/lib/data';
-import { formatDateShort, addDays } from '@/lib/format';
-import type { Role, Unit, CirculationTab, Book, Member } from '@/types';
+import { findCopyByBarcode, findMemberById, MEMBERS } from '@/lib/data';
+import { formatDateShort, addDays, toDateKey } from '@/lib/format';
+import type { Role, Unit, CirculationTab, Member } from '@/types';
 
 interface SirkulasiProps {
   role: Role;
   activeUnit: Unit;
   route: string;
   navigate: (path: string) => void;
-  onChangeRole: (r: Role) => void;
   onLogout: () => void;
   notify: (type: 'success' | 'warning' | 'error' | 'info', title: string, message?: string) => void;
 }
@@ -32,7 +31,7 @@ interface ScannedItem {
 }
 
 export function SirkulasiPage({
-  role, activeUnit, route, navigate, onChangeRole, onLogout, notify,
+  role, activeUnit, route, navigate, onLogout, notify,
 }: SirkulasiProps) {
   const [tab, setTab] = useState<CirculationTab>('peminjaman');
   const [memberId, setMemberId] = useState('');
@@ -42,7 +41,7 @@ export function SirkulasiPage({
   const [scannedItems, setScannedItems] = useState<ScannedItem[]>([]);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [receiptOpen, setReceiptOpen] = useState(false);
-  const [receiptData, setReceiptData] = useState<{ member: Member; items: ScannedItem[]; date: string } | null>(null);
+  const [receiptData, setReceiptData] = useState<{ trxId: string; member: Member; items: ScannedItem[]; date: string } | null>(null);
   const barcodeRef = useRef<HTMLInputElement>(null);
   const memberRef = useRef<HTMLInputElement>(null);
 
@@ -94,8 +93,8 @@ export function SirkulasiPage({
       return;
     }
 
-    const book = findBookByBarcode(code);
-    if (!book) {
+    const match = findCopyByBarcode(code);
+    if (!match) {
       setScannedItems((prev) => [
         ...prev,
         { barcode: code, title: 'Tidak ditemukan', status: 'tidak-ditemukan', dueDate: '' },
@@ -105,8 +104,9 @@ export function SirkulasiPage({
       return;
     }
 
-    const copy = book.copies.find((c) => c.unit === (member?.unit || activeUnit));
-    if (copy?.status === 'dipinjam') {
+    // Status diambil dari eksemplar fisik yang dipindai (barcode unik per eksemplar).
+    const { book, copy } = match;
+    if (copy.status === 'dipinjam') {
       setScannedItems((prev) => [
         ...prev,
         { barcode: code, title: book.title, status: 'sudah-dipinjam', dueDate: '' },
@@ -116,7 +116,7 @@ export function SirkulasiPage({
       return;
     }
 
-    if (copy?.status === 'tidak-dapat-dipinjam' || copy?.status === 'direservasi') {
+    if (copy.status === 'tidak-dapat-dipinjam' || copy.status === 'direservasi') {
       setScannedItems((prev) => [
         ...prev,
         { barcode: code, title: book.title, status: 'tidak-tersedia', dueDate: '' },
@@ -126,7 +126,7 @@ export function SirkulasiPage({
       return;
     }
 
-    const dueDate = addDays(new Date(), 7).toISOString().split('T')[0];
+    const dueDate = toDateKey(addDays(new Date(), 7));
     setScannedItems((prev) => [
       ...prev,
       { barcode: code, title: book.title, status: 'siap', dueDate },
@@ -148,7 +148,7 @@ export function SirkulasiPage({
   const handleConfirm = () => {
     setConfirmOpen(false);
     if (member) {
-      setReceiptData({ member, items: scannedItems.filter((s) => s.status === 'siap'), date: new Date().toISOString() });
+      setReceiptData({ trxId: `TRX-${Date.now().toString().slice(-8)}`, member, items: scannedItems.filter((s) => s.status === 'siap'), date: new Date().toISOString() });
       setReceiptOpen(true);
       setScannedItems([]);
     }
@@ -173,7 +173,6 @@ export function SirkulasiPage({
       activeUnit={activeUnit}
       route={route}
       navigate={navigate}
-      onChangeRole={onChangeRole}
       onLogout={onLogout}
       pageTitle="Sirkulasi"
       breadcrumbs={[{ label: 'Pustakawan' }, { label: 'Sirkulasi' }]}
@@ -481,7 +480,7 @@ export function SirkulasiPage({
             <div className="border border-line rounded-md p-4 space-y-2 bg-canvas/30">
               <div className="flex justify-between text-sm">
                 <span className="text-ink-muted">Nomor Transaksi</span>
-                <span className="font-mono text-ink">TRX-{Date.now().toString().slice(-8)}</span>
+                <span className="font-mono text-ink">{receiptData.trxId}</span>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-ink-muted">Anggota</span>

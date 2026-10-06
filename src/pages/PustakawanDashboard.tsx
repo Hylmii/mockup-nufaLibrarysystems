@@ -1,7 +1,7 @@
 import {
-  BookOpen, BookCheck, BookPlus, UserPlus, ClipboardList, Upload,
+  BookCheck, BookPlus, UserPlus, ClipboardList, Upload,
   ArrowLeftRight, Clock, AlertTriangle, Bookmark, Package, FileWarning,
-  ChevronRight, Activity, Plus,
+  ChevronRight, Activity,
 } from 'lucide-react';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { Card, CardHeader } from '@/components/ui/Card';
@@ -16,7 +16,6 @@ interface PustakawanDashboardProps {
   activeUnit: Unit;
   route: string;
   navigate: (path: string) => void;
-  onChangeRole: (r: Role) => void;
   onLogout: () => void;
   notify: (type: 'success' | 'warning' | 'error' | 'info', title: string, message?: string) => void;
 }
@@ -40,7 +39,7 @@ const activityColors: Record<string, string> = {
 };
 
 export function PustakawanDashboard({
-  role, activeUnit, route, navigate, onChangeRole, onLogout,
+  role, activeUnit, route, navigate, onLogout,
 }: PustakawanDashboardProps) {
   const today = new Date();
   const tasks = PUSTAKAWAN_TASKS;
@@ -64,7 +63,6 @@ export function PustakawanDashboard({
       activeUnit={activeUnit}
       route={route}
       navigate={navigate}
-      onChangeRole={onChangeRole}
       onLogout={onLogout}
       pageTitle="Beranda Pustakawan"
       breadcrumbs={[{ label: 'Pustakawan' }, { label: 'Beranda' }]}

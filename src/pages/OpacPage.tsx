@@ -1,20 +1,33 @@
 import { useState, useMemo, useEffect } from 'react';
 import {
   Search, Filter, X, Compass, Atom, Scroll, Calculator, Leaf, PenLine,
-  TrendingUp, BrainCircuit, ChevronRight, BookOpen, Bookmark,
-  CheckCircle2, Clock, Loader2, ScanLine, RotateCcw, AlertTriangle,
+  TrendingUp, BrainCircuit, ChevronRight, ChevronDown, Bookmark,
+  CheckCircle2, Clock, ScanLine, RotateCcw, AlertTriangle,
+  Smile, BookHeart, Magnet, FlaskConical, Globe, Moon, Languages, MessageCircle,
+  BookText, Monitor, Palette, UserRound, HeartPulse, Library,
+  type LucideIcon,
 } from 'lucide-react';
 import { PublicLayout } from '@/components/layout/PublicLayout';
 import { ScanDialog } from '@/components/ScanDialog';
 import { BookCover } from '@/components/BookCover';
-import { Badge, StatusBadge } from '@/components/ui/Badge';
+import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Select } from '@/components/ui/Input';
 import { FilterChip } from '@/components/ui/Tabs';
 import { EmptyState, Skeleton } from '@/components/ui/States';
-import { BOOKS, POPULAR_CATEGORIES } from '@/lib/data';
-import type { Book, Unit } from '@/types';
+import { replaceRoute } from '@/lib/store';
+import { BOOKS, POPULAR_CATEGORIES, MEMBER_LOANS, findCopyByBarcode, findMemberById } from '@/lib/data';
+import type { Book } from '@/types';
+
+interface OpacFilters {
+  unit: string;
+  jenjang: string;
+  kategori: string;
+  penulis: string;
+  tahun: string;
+  tersediaSaja: boolean;
+}
 
 interface OpacPageProps {
   route: string;
@@ -23,34 +36,83 @@ interface OpacPageProps {
   notify: (type: 'success' | 'warning' | 'error' | 'info', title: string, message?: string) => void;
 }
 
-const iconMap: Record<string, React.ReactNode> = {
-  Compass: <Compass size={20} />,
-  Atom: <Atom size={20} />,
-  Scroll: <Scroll size={20} />,
-  Calculator: <Calculator size={20} />,
-  Leaf: <Leaf size={20} />,
-  PenLine: <PenLine size={20} />,
-  TrendingUp: <TrendingUp size={20} />,
-  BrainCircuit: <BrainCircuit size={20} />,
+const ICONS: Record<string, LucideIcon> = {
+  Compass, Atom, Scroll, Calculator, Leaf, PenLine, TrendingUp, BrainCircuit,
+  Smile, BookHeart, Magnet, FlaskConical, Globe, Moon, Languages, MessageCircle,
+  BookText, Monitor, Palette, UserRound, HeartPulse, Library,
 };
+
+function CategoryIcon({ name }: { name: string }) {
+  const Icon = ICONS[name] ?? Library;
+  return <Icon size={20} />;
+}
+
+/** Jumlah kartu hasil pencarian yang ditampilkan per muatan. */
+const RESULTS_STEP = 24;
+
+const DEFAULT_FILTERS: OpacFilters = {
+  unit: 'SEMUA',
+  jenjang: 'SEMUA',
+  kategori: 'SEMUA',
+  penulis: '',
+  tahun: 'SEMUA',
+  tersediaSaja: false,
+};
+
+const categoryHref = (name: string) => `/opac?tab=cari&kategori=${encodeURIComponent(name)}`;
+
+// Dihitung sekali: 8 judul terbaru untuk beranda, daftar kategori & tahun untuk filter.
+const NEW_BOOKS = BOOKS.filter((b) => b.isNew).sort((a, b) => b.year - a.year).slice(0, 8);
+const ALL_CATEGORIES = POPULAR_CATEGORIES.map((c) => c.name);
+const ALL_YEARS = Array.from(new Set(BOOKS.map((b) => b.year))).sort((a, b) => b - a);
+
+function cariHref(query: string, kategori = 'SEMUA'): string {
+  const params = ['tab=cari'];
+  if (query.trim()) params.push(`q=${encodeURIComponent(query.trim())}`);
+  if (kategori !== 'SEMUA') params.push(`kategori=${encodeURIComponent(kategori)}`);
+  return `/opac?${params.join('&')}`;
+}
+
+function routeParam(route: string, name: string): string | null {
+  const m = route.match(new RegExp(`[?&]${name}=([^&]*)`));
+  return m ? decodeURIComponent(m[1]) : null;
+}
+
+/**
+ * Cocokkan kata kunci ke judul, penulis, penerbit, kategori, dan ISBN. Tiap kata
+ * dicari terpisah ("sejarah majapahit" cocok walau tak berurutan) dan ISBN boleh
+ * diketik tanpa tanda hubung.
+ */
+function matchesQuery(book: Book, query: string): boolean {
+  const haystack = `${book.title} ${book.author} ${book.publisher} ${book.category} ${book.isbn}`.toLowerCase();
+  const isbnDigits = book.isbn.replace(/-/g, '');
+  return query
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(Boolean)
+    .every((term) => haystack.includes(term) || (/^\d{3,}$/.test(term.replace(/-/g, '')) && isbnDigits.includes(term.replace(/-/g, ''))));
+}
 
 export function OpacPage({ route, navigate, onLogout, notify }: OpacPageProps) {
   const [search, setSearch] = useState('');
   const [searching, setSearching] = useState(false);
-  const [hasSearched, setHasSearched] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [scanOpen, setScanOpen] = useState(false);
-  const [filters, setFilters] = useState({
-    unit: 'SEMUA',
-    jenjang: 'SEMUA',
-    kategori: 'SEMUA',
-    penulis: '',
-    tahun: 'SEMUA',
-    tersediaSaja: false,
-  });
+  const [filters, setFilters] = useState<OpacFilters>(DEFAULT_FILTERS);
 
-  const newBooks = BOOKS.filter((b) => b.isNew);
-  const categories = Array.from(new Set(BOOKS.map((b) => b.category)));
+  // Kata kunci & kategori disimpan di URL (?q=…&kategori=…) agar pencarian tetap
+  // terbawa saat kembali dari halaman detail buku.
+  const routeQuery = useMemo(() => routeParam(route, 'q'), [route]);
+  const routeKategori = useMemo(() => routeParam(route, 'kategori'), [route]);
+  useEffect(() => {
+    if (routeQuery !== null) setSearch(routeQuery);
+  }, [routeQuery]);
+  useEffect(() => {
+    if (!routeKategori) return;
+    setFilters((f) => ({ ...f, kategori: routeKategori }));
+    // Klik kategori (tanpa kata kunci) = jelajah kategori, bukan lanjutan pencarian lama.
+    if (routeQuery === null) setSearch('');
+  }, [routeKategori, routeQuery]);
 
   // Determine active tab from route
   const routeTab = useMemo(() => {
@@ -62,27 +124,36 @@ export function OpacPage({ route, navigate, onLogout, notify }: OpacPageProps) {
     return 'beranda';
   }, [route]);
 
-  useEffect(() => {
-    if (routeTab === 'cari') setHasSearched(true);
-  }, [routeTab]);
-
-  const handleSearch = (e?: React.FormEvent) => {
-    e?.preventDefault();
+  const showSearching = () => {
     setSearching(true);
-    setHasSearched(true);
-    setTimeout(() => setSearching(false), 600);
+    setTimeout(() => setSearching(false), 400);
   };
+
+  // Dari beranda: buka tab Cari dengan kata kunci baru, tanpa sisa filter sebelumnya.
+  const handleHomeSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    setFilters(DEFAULT_FILTERS);
+    navigate(cariHref(search));
+    showSearching();
+  };
+
+  // Di tab Cari: hasil sudah tersaring saat mengetik.
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    showSearching();
+  };
+
+  // Selama di tab Cari, URL selalu mencerminkan kata kunci & kategori — kembali dari
+  // detail buku (tombol Back) akan memulihkan hasil pencarian yang sama.
+  const onCariTab = routeTab === 'cari';
+  useEffect(() => {
+    if (onCariTab) replaceRoute(cariHref(search, filters.kategori));
+  }, [onCariTab, search, filters.kategori]);
 
   const filteredBooks = useMemo(() => {
     let result = BOOKS;
     if (search.trim()) {
-      const q = search.toLowerCase();
-      result = result.filter((b) =>
-        b.title.toLowerCase().includes(q) ||
-        b.author.toLowerCase().includes(q) ||
-        b.isbn.includes(q) ||
-        b.category.toLowerCase().includes(q),
-      );
+      result = result.filter((b) => matchesQuery(b, search));
     }
     if (filters.kategori !== 'SEMUA') {
       result = result.filter((b) => b.category === filters.kategori);
@@ -110,8 +181,8 @@ export function OpacPage({ route, navigate, onLogout, notify }: OpacPageProps) {
         <BerandaTab
           search={search}
           setSearch={setSearch}
-          onSearch={handleSearch}
-          newBooks={newBooks}
+          onSearch={handleHomeSearch}
+          newBooks={NEW_BOOKS}
           navigate={navigate}
           onOpenScan={() => setScanOpen(true)}
         />
@@ -123,14 +194,13 @@ export function OpacPage({ route, navigate, onLogout, notify }: OpacPageProps) {
           setSearch={setSearch}
           onSearch={handleSearch}
           searching={searching}
-          hasSearched={hasSearched}
           filteredBooks={filteredBooks}
           filters={filters}
           setFilters={setFilters}
           showFilters={showFilters}
           setShowFilters={setShowFilters}
           activeFilterCount={activeFilterCount}
-          categories={categories}
+          categories={ALL_CATEGORIES}
           navigate={navigate}
           onOpenScan={() => setScanOpen(true)}
         />
@@ -145,7 +215,7 @@ export function OpacPage({ route, navigate, onLogout, notify }: OpacPageProps) {
       )}
 
       {routeTab === 'reservasi' && (
-        <ReservasiTab navigate={navigate} />
+        <ReservasiTab />
       )}
 
       {routeTab === 'profil' && (
@@ -162,7 +232,7 @@ function BerandaTab({
 }: {
   search: string;
   setSearch: (v: string) => void;
-  onSearch: () => void;
+  onSearch: (e: React.FormEvent) => void;
   newBooks: Book[];
   navigate: (p: string) => void;
   onOpenScan: () => void;
@@ -233,11 +303,11 @@ function BerandaTab({
           {POPULAR_CATEGORIES.slice(0, 8).map((cat) => (
             <button
               key={cat.name}
-              onClick={() => navigate('/opac?tab=cari')}
+              onClick={() => navigate(categoryHref(cat.name))}
               className="flex items-center gap-3 p-4 rounded-lg border border-line bg-surface hover:border-navy-200 hover:shadow-card transition-all text-left"
             >
               <span className="flex items-center justify-center w-10 h-10 rounded-md bg-navy-50 text-navy flex-shrink-0">
-                {iconMap[cat.icon]}
+                <CategoryIcon name={cat.icon} />
               </span>
               <div className="min-w-0">
                 <p className="text-sm font-medium text-ink truncate">{cat.name}</p>
@@ -267,18 +337,17 @@ function BerandaTab({
 }
 
 function CariTab({
-  search, setSearch, onSearch, searching, hasSearched, filteredBooks,
+  search, setSearch, onSearch, searching, filteredBooks,
   filters, setFilters, showFilters, setShowFilters, activeFilterCount,
   categories, navigate, onOpenScan,
 }: {
   search: string;
   setSearch: (v: string) => void;
-  onSearch: () => void;
+  onSearch: (e: React.FormEvent) => void;
   searching: boolean;
-  hasSearched: boolean;
   filteredBooks: Book[];
-  filters: any;
-  setFilters: (f: any) => void;
+  filters: OpacFilters;
+  setFilters: (f: OpacFilters) => void;
   showFilters: boolean;
   setShowFilters: (v: boolean) => void;
   activeFilterCount: number;
@@ -286,6 +355,11 @@ function CariTab({
   navigate: (p: string) => void;
   onOpenScan: () => void;
 }) {
+  // Katalog berisi ribuan judul — tampilkan bertahap agar halaman tetap ringan.
+  const [visible, setVisible] = useState(RESULTS_STEP);
+  useEffect(() => setVisible(RESULTS_STEP), [filteredBooks]);
+  const shownBooks = filteredBooks.slice(0, visible);
+
   return (
     <div className="max-w-6xl mx-auto px-4 py-6">
       {/* Search bar */}
@@ -328,8 +402,11 @@ function CariTab({
 
         {/* Filter chips on mobile */}
         <div className="lg:hidden flex items-center gap-2 overflow-x-auto flex-1">
-          <FilterChip label="Semua Unit" active={filters.kategori === 'SEMUA'} onClick={() => setFilters({ ...filters, kategori: 'SEMUA' })} />
-          {categories.slice(0, 3).map((cat) => (
+          <FilterChip label="Semua Kategori" active={filters.kategori === 'SEMUA'} onClick={() => setFilters({ ...filters, kategori: 'SEMUA' })} />
+          {/* Kategori aktif selalu tampil sebagai chip, diikuti kategori terbanyak. */}
+          {[...(filters.kategori !== 'SEMUA' ? [filters.kategori] : []), ...categories.filter((c) => c !== filters.kategori)]
+            .slice(0, 3)
+            .map((cat) => (
             <FilterChip key={cat} label={cat} active={filters.kategori === cat} onClick={() => setFilters({ ...filters, kategori: cat })} />
           ))}
         </div>
@@ -352,7 +429,7 @@ function CariTab({
               onChange={(e) => setFilters({ ...filters, tahun: e.target.value })}
               options={[
                 { value: 'SEMUA', label: 'Semua Tahun' },
-                ...Array.from(new Set(BOOKS.map((b) => b.year))).sort((a, b) => b - a).map((y) => ({ value: String(y), label: String(y) })),
+                ...ALL_YEARS.map((y) => ({ value: String(y), label: String(y) })),
               ]}
             />
           </div>
@@ -369,7 +446,7 @@ function CariTab({
 
         {activeFilterCount > 0 && (
           <button
-            onClick={() => setFilters({ unit: 'SEMUA', jenjang: 'SEMUA', kategori: 'SEMUA', penulis: '', tahun: 'SEMUA', tersediaSaja: false })}
+            onClick={() => setFilters(DEFAULT_FILTERS)}
             className="text-sm text-ink-muted hover:text-error flex items-center gap-1"
           >
             <X size={14} /> Reset
@@ -396,7 +473,7 @@ function CariTab({
               onChange={(e) => setFilters({ ...filters, tahun: e.target.value })}
               options={[
                 { value: 'SEMUA', label: 'Semua Tahun' },
-                ...Array.from(new Set(BOOKS.map((b) => b.year))).sort((a, b) => b - a).map((y) => ({ value: String(y), label: String(y) })),
+                ...ALL_YEARS.map((y) => ({ value: String(y), label: String(y) })),
               ]}
             />
             <label className="flex items-center gap-2 cursor-pointer">
@@ -432,7 +509,7 @@ function CariTab({
           title="Tidak ada hasil ditemukan"
           message={`Tidak ada buku yang cocok dengan "${search}". Coba ubah kata kunci atau hapus filter.`}
           action={
-            <Button variant="secondary" onClick={() => { setSearch(''); setFilters({ unit: 'SEMUA', jenjang: 'SEMUA', kategori: 'SEMUA', penulis: '', tahun: 'SEMUA', tersediaSaja: false }); }}>
+            <Button variant="secondary" onClick={() => { setSearch(''); setFilters(DEFAULT_FILTERS); navigate(cariHref('')); }}>
               Reset Pencarian
             </Button>
           }
@@ -440,14 +517,25 @@ function CariTab({
       ) : (
         <>
           <p className="text-sm text-ink-muted mb-4">
-            {filteredBooks.length} buku ditemukan
+            {filteredBooks.length.toLocaleString('id-ID')} buku ditemukan
             {search && ` untuk "${search}"`}
+            {filters.kategori !== 'SEMUA' && ` di kategori ${filters.kategori}`}
           </p>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-            {filteredBooks.map((book) => (
+            {shownBooks.map((book) => (
               <BookResultCard key={book.id} book={book} navigate={navigate} />
             ))}
           </div>
+          {visible < filteredBooks.length && (
+            <div className="flex flex-col items-center gap-2 mt-6">
+              <p className="text-xs text-ink-muted">
+                Menampilkan {shownBooks.length.toLocaleString('id-ID')} dari {filteredBooks.length.toLocaleString('id-ID')} buku
+              </p>
+              <Button variant="secondary" onClick={() => setVisible((v) => v + RESULTS_STEP)} icon={<ChevronDown size={16} />}>
+                Tampilkan lebih banyak
+              </Button>
+            </div>
+          )}
         </>
       )}
     </div>
@@ -503,11 +591,11 @@ function KategoriTab({ navigate }: { navigate: (p: string) => void }) {
         {POPULAR_CATEGORIES.map((cat) => (
           <button
             key={cat.name}
-            onClick={() => navigate('/opac?tab=cari')}
+            onClick={() => navigate(categoryHref(cat.name))}
             className="flex items-center gap-3 p-5 rounded-lg border border-line bg-surface hover:border-navy-200 hover:shadow-card transition-all text-left"
           >
             <span className="flex items-center justify-center w-12 h-12 rounded-md bg-navy-50 text-navy flex-shrink-0">
-              {iconMap[cat.icon]}
+              <CategoryIcon name={cat.icon} />
             </span>
             <div className="min-w-0">
               <p className="text-sm font-semibold text-ink truncate">{cat.name}</p>
@@ -521,13 +609,12 @@ function KategoriTab({ navigate }: { navigate: (p: string) => void }) {
 }
 
 function PinjamanTab({ navigate }: { navigate: (p: string) => void }) {
-  // Pinjaman dikaitkan ke buku nyata agar tombol "Kembalikan" bisa membuka
+  // Pinjaman dikaitkan ke eksemplar nyata agar tombol "Kembalikan" bisa membuka
   // kios pengembalian mandiri dengan lokasi rak yang sesuai.
-  const loans = [
-    { book: BOOKS[0], daysOffset: 5 },   // aman
-    { book: BOOKS[1], daysOffset: 2 },   // segera jatuh tempo
-    { book: BOOKS[2], daysOffset: -3 },  // sudah lewat tempo
-  ];
+  const loans = MEMBER_LOANS.flatMap((l) => {
+    const match = findCopyByBarcode(l.barcode);
+    return match ? [{ ...match, daysOffset: l.daysOffset }] : [];
+  });
 
   const overdueCount = loans.filter((l) => l.daysOffset < 0).length;
 
@@ -547,7 +634,7 @@ function PinjamanTab({ navigate }: { navigate: (p: string) => void }) {
       )}
 
       <div className="space-y-3">
-        {loans.map(({ book, daysOffset }) => {
+        {loans.map(({ book, copy, daysOffset }) => {
           const dueDate = new Date(Date.now() + daysOffset * 86400000);
           const daysLeft = Math.ceil((dueDate.getTime() - Date.now()) / 86400000);
           const overdue = daysLeft < 0;
@@ -556,7 +643,7 @@ function PinjamanTab({ navigate }: { navigate: (p: string) => void }) {
 
           return (
             <div
-              key={book.id}
+              key={copy.barcode}
               className={`rounded-lg border p-4 transition-colors ${
                 overdue ? 'border-error-border bg-error-bg/40' : 'border-line bg-surface'
               }`}
@@ -567,7 +654,7 @@ function PinjamanTab({ navigate }: { navigate: (p: string) => void }) {
                   <p className="text-sm font-semibold text-ink truncate">{book.title}</p>
                   <p className="text-xs text-ink-muted">{book.author}</p>
                   <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                    <Badge variant="navy" size="sm">Unit {book.copies[0].unit}</Badge>
+                    <Badge variant="navy" size="sm">Unit {copy.unit}</Badge>
                     <span className="text-xs text-ink-muted">
                       Jatuh tempo: {dueDate.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}
                     </span>
@@ -585,7 +672,7 @@ function PinjamanTab({ navigate }: { navigate: (p: string) => void }) {
                     size="sm"
                     variant={overdue ? 'primary' : 'secondary'}
                     icon={<RotateCcw size={14} />}
-                    onClick={() => navigate(`/mandiri?mode=kembali&book=${book.id}`)}
+                    onClick={() => navigate(`/mandiri?mode=kembali&barcode=${encodeURIComponent(copy.barcode)}`)}
                   >
                     Kembalikan
                   </Button>
@@ -608,7 +695,7 @@ function PinjamanTab({ navigate }: { navigate: (p: string) => void }) {
   );
 }
 
-function ReservasiTab({ navigate }: { navigate: (p: string) => void }) {
+function ReservasiTab() {
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
       <h1 className="text-xl font-bold text-ink mb-1">Reservasi Saya</h1>
@@ -631,6 +718,11 @@ function ReservasiTab({ navigate }: { navigate: (p: string) => void }) {
 }
 
 function ProfilTab() {
+  // Angka pinjaman diambil dari data anggota agar selaras dengan tab Pinjaman Saya.
+  const member = findMemberById('SD-000124');
+  const activeLoans = member?.activeLoans ?? 0;
+  const overdueCount = member?.overdueCount ?? 0;
+
   return (
     <div className="max-w-2xl mx-auto px-4 py-8">
       <h1 className="text-xl font-bold text-ink mb-1">Profil Saya</h1>
@@ -649,7 +741,7 @@ function ProfilTab() {
         <div className="grid grid-cols-2 gap-4">
           <div className="p-3 rounded-md bg-canvas/50 border border-line/60">
             <p className="text-xs text-ink-muted mb-1">Peminjaman Aktif</p>
-            <p className="text-xl font-bold text-ink">2</p>
+            <p className="text-xl font-bold text-ink">{activeLoans}</p>
           </div>
           <div className="p-3 rounded-md bg-canvas/50 border border-line/60">
             <p className="text-xs text-ink-muted mb-1">Total Dipinjam</p>
@@ -661,7 +753,7 @@ function ProfilTab() {
           </div>
           <div className="p-3 rounded-md bg-canvas/50 border border-line/60">
             <p className="text-xs text-ink-muted mb-1">Terlambat</p>
-            <p className="text-xl font-bold text-success">0</p>
+            <p className={`text-xl font-bold ${overdueCount > 0 ? 'text-error' : 'text-success'}`}>{overdueCount}</p>
           </div>
         </div>
       </Card>

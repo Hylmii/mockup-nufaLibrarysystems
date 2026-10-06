@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import { useRoute, useRoleState, useToasts } from '@/lib/store';
+import { useRoute, roleFromRoute, useToasts } from '@/lib/store';
 import { ToastStack } from '@/components/ui/Toast';
 import { LoginPage } from '@/pages/LoginPage';
 import { YayasanDashboard } from '@/pages/YayasanDashboard';
@@ -18,14 +18,13 @@ import type { Role, Unit } from '@/types';
 
 function App() {
   const { route, navigate } = useRoute();
-  const { role, changeRole } = useRoleState('pustakawan');
+  const role = roleFromRoute(route);
   const { toasts, notify, dismiss } = useToasts();
 
   const activeUnit: Unit = role === 'pustakawan' ? 'SD' : 'SEMUA';
 
   const handleLogin = useCallback(
     (r: Role) => {
-      changeRole(r);
       if (r === 'siswa') {
         navigate('/opac');
       } else if (r === 'yayasan') {
@@ -34,14 +33,14 @@ function App() {
         navigate('/pustakawan');
       }
     },
-    [changeRole, navigate],
+    [navigate],
   );
 
   const handleLogout = useCallback(() => {
     navigate('/login');
   }, [navigate]);
 
-  const commonProps = { role, activeUnit, route, navigate, onChangeRole: changeRole, onLogout: handleLogout, notify };
+  const commonProps = { role, activeUnit, route, navigate, onLogout: handleLogout, notify };
 
   // Route matching
   if (route === '/login' || route === '/') {
@@ -57,7 +56,7 @@ function App() {
     return (
       <>
         <YayasanDashboard {...commonProps} />
-        <ToastStack toasts={toasts} onDismiss={dismiss} />
+        <ToastStack toasts={toasts} onDismiss={dismiss} besideSidebar />
       </>
     );
   }
@@ -66,7 +65,7 @@ function App() {
     return (
       <>
         <SirkulasiPage {...commonProps} />
-        <ToastStack toasts={toasts} onDismiss={dismiss} />
+        <ToastStack toasts={toasts} onDismiss={dismiss} besideSidebar />
       </>
     );
   }
@@ -82,7 +81,7 @@ function App() {
     return (
       <>
         <Page {...commonProps} />
-        <ToastStack toasts={toasts} onDismiss={dismiss} />
+        <ToastStack toasts={toasts} onDismiss={dismiss} besideSidebar />
       </>
     );
   }

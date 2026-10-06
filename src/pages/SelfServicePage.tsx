@@ -8,9 +8,9 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { BookCover } from '@/components/BookCover';
-import { findBookByBarcode, findMemberById, BOOKS, MEMBERS } from '@/lib/data';
-import { addDays, formatDateShort } from '@/lib/format';
-import type { Book, BookCopy, Member, Unit } from '@/types';
+import { findCopyByBarcode, findMemberById, sampleBarcodes, MEMBERS, MEMBER_LOANS, type CopyMatch } from '@/lib/data';
+import { addDays, formatDateShort, toDateKey } from '@/lib/format';
+import type { Member, Unit } from '@/types';
 
 type Notify = (type: 'success' | 'warning' | 'error' | 'info', title: string, message?: string) => void;
 
@@ -21,14 +21,6 @@ interface SelfServiceProps {
   notify: Notify;
 }
 
-// Barcode buku memuat prefiks unit (BK-SD-xxxx). Pakai itu untuk menemukan
-// eksemplar & lokasi rak yang tepat; jika tak cocok, ambil eksemplar pertama.
-function resolveCopy(book: Book, barcode: string): BookCopy {
-  const match = barcode.toUpperCase().match(/-(SD|SMP|SMA)-/);
-  const unit = match ? (match[1] as Unit) : undefined;
-  return (unit && book.copies.find((c) => c.unit === unit)) || book.copies[0];
-}
-
 export function SelfServicePage({ route, navigate, onLogout, notify }: SelfServiceProps) {
   const mode = useMemo<'home' | 'pinjam' | 'kembali'>(() => {
     if (route.includes('mode=pinjam')) return 'pinjam';
@@ -36,16 +28,18 @@ export function SelfServicePage({ route, navigate, onLogout, notify }: SelfServi
     return 'home';
   }, [route]);
 
-  const preBookId = useMemo(() => {
-    const m = route.match(/book=([^&]+)/);
-    return m ? m[1] : null;
+  // Barcode eksemplar yang dibawa dari scanner OPAC atau daftar Pinjaman Saya.
+  const preBarcode = useMemo(() => {
+    const m = route.match(/barcode=([^&]+)/);
+    return m ? decodeURIComponent(m[1]) : null;
   }, [route]);
 
   return (
     <PublicLayout route={route} navigate={navigate} onLogout={onLogout}>
       {mode === 'home' && <KioskHome navigate={navigate} />}
-      {mode === 'pinjam' && <BorrowFlow preBookId={preBookId} navigate={navigate} notify={notify} />}
-      {mode === 'kembali' && <ReturnFlow preBookId={preBookId} navigate={navigate} notify={notify} />}
+      {/* key: URL kios berubah (mis. barcode lain dari scanner) → alur dimulai ulang dari awal. */}
+      {mode === 'pinjam' && <BorrowFlow key={route} preBarcode={preBarcode} navigate={navigate} notify={notify} />}
+      {mode === 'kembali' && <ReturnFlow key={route} preBarcode={preBarcode} navigate={navigate} notify={notify} />}
     </PublicLayout>
   );
 }
@@ -141,27 +135,27 @@ interface CartItem {
   callNumber: string;
 }
 
+function makeItem({ book, copy }: CopyMatch): CartItem {
+  return {
+    barcode: copy.barcode, bookId: book.id, title: book.title, hue: book.coverHue,
+    unit: copy.unit, shelf: copy.shelf, callNumber: copy.callNumber,
+  };
+}
+
 function BorrowFlow({
-  preBookId, navigate, notify,
-}: { preBookId: string | null; navigate: (p: string) => void; notify: Notify }) {
+  preBarcode, navigate, notify,
+}: { preBarcode: string | null; navigate: (p: string) => void; notify: Notify }) {
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [memberInput, setMemberInput] = useState('');
   const [member, setMember] = useState<Member | null>(null);
   const [memberError, setMemberError] = useState('');
   const [bookInput, setBookInput] = useState('');
   const [cart, setCart] = useState<CartItem[]>([]);
+  const [trxId, setTrxId] = useState('');
   const bookRef = useRef<HTMLInputElement>(null);
 
-  const dueDate = addDays(new Date(), 7).toISOString().split('T')[0];
-  const pendingBook = useMemo(() => (preBookId ? BOOKS.find((b) => b.id === preBookId) ?? null : null), [preBookId]);
-
-  const makeItem = (book: Book, barcode: string): CartItem => {
-    const copy = resolveCopy(book, barcode);
-    return {
-      barcode, bookId: book.id, title: book.title, hue: book.coverHue,
-      unit: copy.unit, shelf: copy.shelf, callNumber: copy.callNumber,
-    };
-  };
+  const dueDate = toDateKey(addDays(new Date(), 7));
+  const pending = useMemo(() => (preBarcode ? findCopyByBarcode(preBarcode) : undefined), [preBarcode]);
 
   const handleMemberSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -176,15 +170,16 @@ function BorrowFlow({
       return;
     }
     setMember(found);
-    // Jika masuk dari tombol "Pinjam" scanner, langsung masukkan buku tsb.
-    if (pendingBook) {
-      const copy = resolveCopy(pendingBook, pendingBook.barcode);
-      if (copy.status === 'tersedia') {
-        setCart([makeItem(pendingBook, pendingBook.barcode)]);
-      }
-    }
     setStep(2);
     notify('success', 'Kartu dikenali', found.name);
+    // Jika masuk dari tombol "Pinjam" scanner, langsung masukkan eksemplar tsb.
+    if (pending) {
+      if (pending.copy.status === 'tersedia') {
+        setCart([makeItem(pending)]);
+      } else {
+        notify('warning', 'Eksemplar tidak tersedia', `${pending.book.title} (${pending.copy.barcode}) tidak dapat dipinjam. Pindai eksemplar lain.`);
+      }
+    }
   };
 
   const addBook = (code: string) => {
@@ -194,18 +189,17 @@ function BorrowFlow({
       notify('warning', 'Sudah ditambahkan', `${c} sudah ada di daftar.`);
       return;
     }
-    const book = findBookByBarcode(c);
-    if (!book) {
+    const match = findCopyByBarcode(c);
+    if (!match) {
       notify('error', 'Tidak dikenali', `Barcode ${c} tidak terdaftar.`);
       return;
     }
-    const copy = resolveCopy(book, c);
-    if (copy.status !== 'tersedia') {
-      notify('error', 'Tidak tersedia', `${book.title} sedang tidak dapat dipinjam.`);
+    if (match.copy.status !== 'tersedia') {
+      notify('error', 'Tidak tersedia', `${match.book.title} (${match.copy.barcode}) sedang tidak dapat dipinjam.`);
       return;
     }
-    setCart((prev) => [...prev, makeItem(book, c)]);
-    notify('success', 'Buku ditambahkan', book.title);
+    setCart((prev) => [...prev, makeItem(match)]);
+    notify('success', 'Buku ditambahkan', match.book.title);
   };
 
   const handleBookSubmit = (e: React.FormEvent) => {
@@ -222,6 +216,12 @@ function BorrowFlow({
     setMemberError('');
     setCart([]);
     setBookInput('');
+    setTrxId('');
+  };
+
+  const confirmBorrow = () => {
+    setTrxId(`TRX-${Date.now().toString().slice(-8)}`);
+    setStep(3);
   };
 
   return (
@@ -293,7 +293,7 @@ function BorrowFlow({
                   className="w-full rounded-md border-2 border-action/40 bg-surface pl-11 pr-3 py-3.5 text-base text-ink placeholder:text-ink-muted/60 focus:border-action focus:shadow-focus outline-none transition-all"
                 />
               </div>
-              <SampleChips label="Contoh buku:" values={BOOKS.slice(0, 3).map((b) => b.barcode)} onPick={(v) => { setBookInput(v); addBook(v); setBookInput(''); bookRef.current?.focus(); }} />
+              <SampleChips label="Contoh buku:" values={sampleBarcodes(3, true)} onPick={(v) => { addBook(v); setBookInput(''); bookRef.current?.focus(); }} />
             </form>
 
             {cart.length > 0 ? (
@@ -325,7 +325,7 @@ function BorrowFlow({
 
             <div className="flex items-center justify-between mt-4 pt-4 border-t border-line">
               <span className="text-sm text-ink-muted">Total: <span className="font-semibold text-ink">{cart.length} buku</span></span>
-              <Button onClick={() => setStep(3)} disabled={cart.length === 0} icon={<CheckCircle2 size={16} />}>
+              <Button onClick={confirmBorrow} disabled={cart.length === 0} icon={<CheckCircle2 size={16} />}>
                 Konfirmasi Peminjaman
               </Button>
             </div>
@@ -349,7 +349,7 @@ function BorrowFlow({
           <div className="border border-line rounded-lg p-4 mt-4 bg-canvas/30 space-y-2">
             <div className="flex justify-between text-sm">
               <span className="text-ink-muted">No. Transaksi</span>
-              <span className="font-mono text-ink">TRX-{Date.now().toString().slice(-8)}</span>
+              <span className="font-mono text-ink">{trxId}</span>
             </div>
             <div className="flex justify-between text-sm">
               <span className="text-ink-muted">Anggota</span>
@@ -395,20 +395,21 @@ interface ReturnedItem {
   callNumber: string;
 }
 
+function toReturnedItem({ book, copy }: CopyMatch): ReturnedItem {
+  return {
+    key: copy.barcode, barcode: copy.barcode, title: book.title, hue: book.coverHue,
+    unit: copy.unit, shelf: copy.shelf, callNumber: copy.callNumber,
+  };
+}
+
 function ReturnFlow({
-  preBookId, navigate, notify,
-}: { preBookId: string | null; navigate: (p: string) => void; notify: Notify }) {
+  preBarcode, navigate, notify,
+}: { preBarcode: string | null; navigate: (p: string) => void; notify: Notify }) {
   // Jika dibuka dari "Kembalikan" di daftar pinjaman, langsung tampilkan lokasi raknya.
   const seed = useMemo<ReturnedItem | null>(() => {
-    if (!preBookId) return null;
-    const book = BOOKS.find((b) => b.id === preBookId);
-    if (!book) return null;
-    const copy = resolveCopy(book, book.barcode);
-    return {
-      key: `${book.barcode}-seed`, barcode: book.barcode, title: book.title, hue: book.coverHue,
-      unit: copy.unit, shelf: copy.shelf, callNumber: copy.callNumber,
-    };
-  }, [preBookId]);
+    const match = preBarcode ? findCopyByBarcode(preBarcode) : undefined;
+    return match ? toReturnedItem(match) : null;
+  }, [preBarcode]);
 
   const [bookInput, setBookInput] = useState('');
   const [current, setCurrent] = useState<ReturnedItem | null>(seed);
@@ -421,22 +422,23 @@ function ReturnFlow({
     const c = bookInput.trim();
     if (!c) return;
     setBookInput('');
-    const book = findBookByBarcode(c);
-    if (!book) {
+    const match = findCopyByBarcode(c);
+    if (!match) {
       setError(`Barcode ${c} tidak dikenali. Coba lagi atau hubungi pustakawan.`);
       notify('error', 'Tidak dikenali', `Barcode ${c} tidak terdaftar.`);
       bookRef.current?.focus();
       return;
     }
-    const copy = resolveCopy(book, c);
-    const item: ReturnedItem = {
-      key: `${c}-${Date.now()}`, barcode: c, title: book.title, hue: book.coverHue,
-      unit: copy.unit, shelf: copy.shelf, callNumber: copy.callNumber,
-    };
+    const item = toReturnedItem(match);
     setError('');
     setCurrent(item);
-    setHistory((prev) => [item, ...prev]);
-    notify('success', 'Buku dikembalikan', book.title);
+    // Pindai ulang eksemplar yang sama cukup menampilkan lagi lokasinya, tanpa dicatat dua kali.
+    if (history.some((h) => h.barcode === item.barcode)) {
+      notify('info', 'Sudah tercatat', `${match.book.title} sudah dikembalikan di sesi ini.`);
+    } else {
+      setHistory((prev) => [item, ...prev]);
+      notify('success', 'Buku dikembalikan', match.book.title);
+    }
     bookRef.current?.focus();
   };
 
@@ -468,7 +470,7 @@ function ReturnFlow({
               <span>{error}</span>
             </div>
           )}
-          <SampleChips label="Contoh buku:" values={BOOKS.slice(0, 3).map((b) => b.barcode)} onPick={(v) => setBookInput(v)} />
+          <SampleChips label="Contoh buku:" values={MEMBER_LOANS.map((l) => l.barcode)} onPick={(v) => setBookInput(v)} />
         </form>
       </Card>
 

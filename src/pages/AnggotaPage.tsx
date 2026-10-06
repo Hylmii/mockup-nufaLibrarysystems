@@ -19,14 +19,13 @@ interface AdminPageProps {
   activeUnit: Unit;
   route: string;
   navigate: (path: string) => void;
-  onChangeRole: (r: Role) => void;
   onLogout: () => void;
   notify: Notify;
 }
 
 const CATEGORY_LABEL: Record<Member['category'], string> = { siswa: 'Siswa', guru: 'Guru', staf: 'Staf' };
 
-export function AnggotaPage({ role, activeUnit, route, navigate, onChangeRole, onLogout, notify }: AdminPageProps) {
+export function AnggotaPage({ role, activeUnit, route, navigate, onLogout, notify }: AdminPageProps) {
   const [search, setSearch] = useState('');
   const [unit, setUnit] = useState('SEMUA');
   const [status, setStatus] = useState('SEMUA');
@@ -55,7 +54,7 @@ export function AnggotaPage({ role, activeUnit, route, navigate, onChangeRole, o
   return (
     <AdminLayout
       role={role} activeUnit={activeUnit} route={route} navigate={navigate}
-      onChangeRole={onChangeRole} onLogout={onLogout}
+      onLogout={onLogout}
       pageTitle="Anggota"
       breadcrumbs={[{ label: 'Pustakawan' }, { label: 'Anggota' }]}
       pageActions={

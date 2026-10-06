@@ -1,9 +1,9 @@
 import { useState, useRef, useEffect } from 'react';
 import {
-  Bell, ChevronDown, Search, Menu, X, Home, BookOpen, Users, FileText,
-  BarChart3, Package, ClipboardList, Layers, GitCompare, UserCog,
-  BookMarked, BookCheck, Library, ShoppingCart, ArrowLeftRight, Settings,
-  Building2, User, LogOut, Eye, GraduationCap,
+  Bell, ChevronDown, Menu, X, Home, BookOpen, Users,
+  BarChart3, Package, ClipboardList, GitCompare,
+  BookMarked, ShoppingCart, ArrowLeftRight, Settings,
+  Building2, LogOut, GraduationCap,
 } from 'lucide-react';
 import { NufaLogo } from '@/components/NufaLogo';
 import { Badge } from '@/components/ui/Badge';
@@ -19,11 +19,12 @@ interface NavItem {
 const NAV_BY_ROLE: Record<Role, NavItem[]> = {
   yayasan: [
     { label: 'Ringkasan Yayasan', path: '/yayasan', icon: <Home size={18} /> },
-    { label: 'Perbandingan Unit', path: '/yayasan/perbandingan', icon: <GitCompare size={18} /> },
-    { label: 'Koleksi', path: '/yayasan/koleksi', icon: <BookOpen size={18} /> },
-    { label: 'Sirkulasi', path: '/yayasan/sirkulasi', icon: <ArrowLeftRight size={18} /> },
-    { label: 'Stock Opname', path: '/yayasan/stock-opname', icon: <ClipboardList size={18} /> },
-    { label: 'Laporan', path: '/yayasan/laporan', icon: <BarChart3 size={18} /> },
+    // Sub-halaman berikut belum dibuat (PRD YAY-6) — saat ini menampilkan Ringkasan.
+    { label: 'Perbandingan Unit', path: '/yayasan/perbandingan', icon: <GitCompare size={18} />, badge: 'Segera' },
+    { label: 'Koleksi', path: '/yayasan/koleksi', icon: <BookOpen size={18} />, badge: 'Segera' },
+    { label: 'Sirkulasi', path: '/yayasan/sirkulasi', icon: <ArrowLeftRight size={18} />, badge: 'Segera' },
+    { label: 'Stock Opname', path: '/yayasan/stock-opname', icon: <ClipboardList size={18} />, badge: 'Segera' },
+    { label: 'Laporan', path: '/yayasan/laporan', icon: <BarChart3 size={18} />, badge: 'Segera' },
   ],
   pustakawan: [
     { label: 'Beranda', path: '/pustakawan', icon: <Home size={18} /> },
@@ -37,6 +38,17 @@ const NAV_BY_ROLE: Record<Role, NavItem[]> = {
   ],
   siswa: [],
 };
+
+/**
+ * Menu aktif = item dengan path terpanjang yang cocok dengan rute (tanpa query),
+ * agar menu induk seperti "/yayasan" tidak ikut tersorot di sub-halamannya.
+ */
+function findActivePath(nav: NavItem[], route: string): string | undefined {
+  const path = route.split('?')[0];
+  return nav
+    .filter((item) => path === item.path || path.startsWith(`${item.path}/`))
+    .sort((a, b) => b.path.length - a.path.length)[0]?.path;
+}
 
 const ROLE_LABELS: Record<Role, string> = {
   yayasan: 'Manajemen Yayasan',
@@ -55,7 +67,6 @@ interface AdminLayoutProps {
   activeUnit: Unit;
   route: string;
   navigate: (path: string) => void;
-  onChangeRole: (r: Role) => void;
   onLogout: () => void;
   children: React.ReactNode;
   breadcrumbs?: { label: string; path?: string }[];
@@ -64,7 +75,7 @@ interface AdminLayoutProps {
 }
 
 export function AdminLayout({
-  role, activeUnit, route, navigate, onChangeRole, onLogout,
+  role, activeUnit, route, navigate, onLogout,
   children, breadcrumbs, pageTitle, pageActions,
 }: AdminLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -74,6 +85,7 @@ export function AdminLayout({
   const notifRef = useRef<HTMLDivElement>(null);
   const nav = NAV_BY_ROLE[role];
   const user = ROLE_USERS[role];
+  const activePath = findActivePath(nav, route);
 
   useEffect(() => {
     const onClick = (e: MouseEvent) => {
@@ -104,7 +116,7 @@ export function AdminLayout({
       >
         <div className="flex items-center justify-between px-5 py-4 border-b border-white/10">
           <NufaLogo size={32} className="[&_span]:text-white [&_.text-ink-muted]:text-white/60" />
-          <button onClick={() => setSidebarOpen(false)} className="lg:hidden text-white/70 hover:text-white">
+          <button onClick={() => setSidebarOpen(false)} className="lg:hidden text-white/70 hover:text-white" aria-label="Tutup menu">
             <X size={20} />
           </button>
         </div>
@@ -126,7 +138,7 @@ export function AdminLayout({
           <p className="px-3 text-[11px] font-semibold text-white/70 uppercase tracking-wide mb-2">Menu</p>
           <ul className="space-y-0.5">
             {nav.map((item) => {
-              const isActive = route === item.path || (item.path !== '/pustakawan' && route.startsWith(item.path));
+              const isActive = item.path === activePath;
               return (
                 <li key={item.path}>
                   <button
@@ -140,7 +152,13 @@ export function AdminLayout({
                     <span className="flex-shrink-0">{item.icon}</span>
                     {item.label}
                     {item.badge && (
-                      <span className="ml-auto text-xs bg-warning/80 text-white px-1.5 py-0.5 rounded-full">{item.badge}</span>
+                      <span
+                        className={`ml-auto text-[10px] font-medium px-1.5 py-0.5 rounded-full [text-shadow:none] ${
+                          isActive ? 'bg-navy-50 text-navy-800' : 'bg-white/20 text-white'
+                        }`}
+                      >
+                        {item.badge}
+                      </span>
                     )}
                   </button>
                 </li>
@@ -160,7 +178,7 @@ export function AdminLayout({
       <div className="lg:ml-sidebar">
         {/* Top bar */}
         <header className="sticky top-0 z-20 bg-surface border-b border-line h-16 flex items-center px-4 lg:px-6 gap-3">
-          <button onClick={() => setSidebarOpen(true)} className="lg:hidden text-ink-muted hover:text-ink">
+          <button onClick={() => setSidebarOpen(true)} className="lg:hidden text-ink-muted hover:text-ink" aria-label="Buka menu">
             <Menu size={22} />
           </button>
 
@@ -225,6 +243,8 @@ export function AdminLayout({
             <button
               onClick={() => setProfileOpen(!profileOpen)}
               className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-canvas transition-colors"
+              aria-label="Menu profil"
+              aria-expanded={profileOpen}
             >
               <div className="w-8 h-8 rounded-full bg-navy flex items-center justify-center text-white text-sm font-semibold">
                 {user.name.charAt(0)}
@@ -247,7 +267,6 @@ export function AdminLayout({
                     <button
                       key={r}
                       onClick={() => {
-                        onChangeRole(r);
                         setProfileOpen(false);
                         navigate(r === 'siswa' ? '/opac' : `/${r}`);
                       }}

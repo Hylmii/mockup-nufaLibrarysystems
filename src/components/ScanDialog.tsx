@@ -6,8 +6,7 @@ import { Dialog } from '@/components/ui/Dialog';
 import { Button } from '@/components/ui/Button';
 import { BookCover } from '@/components/BookCover';
 import { Badge } from '@/components/ui/Badge';
-import { findBookByBarcode, BOOKS } from '@/lib/data';
-import type { Book } from '@/types';
+import { findCopyByBarcode, sampleBarcodes, type CopyMatch } from '@/lib/data';
 
 interface ScanDialogProps {
   open: boolean;
@@ -16,11 +15,12 @@ interface ScanDialogProps {
   notify: (type: 'success' | 'warning' | 'error' | 'info', title: string, message?: string) => void;
 }
 
-const SAMPLE_BARCODES = BOOKS.slice(0, 4).map((b) => b.barcode);
+// Campuran eksemplar tersedia & tidak, agar kedua kondisi bisa dicoba.
+const SAMPLE_BARCODES = sampleBarcodes(3, true).concat('BK-SD-000219');
 
 export function ScanDialog({ open, onClose, navigate, notify }: ScanDialogProps) {
   const [barcode, setBarcode] = useState('');
-  const [result, setResult] = useState<Book | null>(null);
+  const [result, setResult] = useState<CopyMatch | null>(null);
   const [notFound, setNotFound] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -36,11 +36,11 @@ export function ScanDialog({ open, onClose, navigate, notify }: ScanDialogProps)
   const doScan = (code: string) => {
     const c = code.trim();
     if (!c) return;
-    const book = findBookByBarcode(c);
-    if (book) {
-      setResult(book);
+    const match = findCopyByBarcode(c);
+    if (match) {
+      setResult(match);
       setNotFound(false);
-      notify('success', 'Buku ditemukan', book.title);
+      notify('success', 'Buku ditemukan', match.book.title);
     } else {
       setResult(null);
       setNotFound(true);
@@ -60,7 +60,11 @@ export function ScanDialog({ open, onClose, navigate, notify }: ScanDialogProps)
     setTimeout(() => inputRef.current?.focus(), 50);
   };
 
-  const availableCount = result ? result.copies.filter((c) => c.status === 'tersedia').length : 0;
+  // Yang dipinjam adalah eksemplar fisik yang dipindai, bukan sembarang eksemplar judul ini.
+  const copyAvailable = result?.copy.status === 'tersedia';
+  const otherAvailable = result
+    ? result.book.copies.filter((c) => c.status === 'tersedia' && c.barcode !== result.copy.barcode)
+    : [];
 
   return (
     <Dialog
@@ -71,13 +75,13 @@ export function ScanDialog({ open, onClose, navigate, notify }: ScanDialogProps)
       footer={
         result ? (
           <>
-            <Button variant="secondary" onClick={() => { onClose(); navigate(`/buku/${result.id}`); }}>
+            <Button variant="secondary" onClick={() => { onClose(); navigate(`/buku/${result.book.id}`); }}>
               Lihat Detail
             </Button>
             <Button
-              onClick={() => { onClose(); navigate(`/mandiri?mode=pinjam&book=${result.id}`); }}
+              onClick={() => { onClose(); navigate(`/mandiri?mode=pinjam&barcode=${encodeURIComponent(result.copy.barcode)}`); }}
               icon={<BookPlus size={16} />}
-              disabled={availableCount === 0}
+              disabled={!copyAvailable}
             >
               Pinjam Buku Ini
             </Button>
@@ -150,33 +154,37 @@ export function ScanDialog({ open, onClose, navigate, notify }: ScanDialogProps)
           </button>
 
           <div className="flex gap-4">
-            <BookCover hue={result.coverHue} title={result.title} author={result.author} size="sm" />
+            <BookCover hue={result.book.coverHue} title={result.book.title} author={result.book.author} size="sm" />
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-1.5 mb-1">
-                <Badge variant="navy" size="sm">{result.category}</Badge>
-                {result.isNew && <Badge variant="info" size="sm">Baru</Badge>}
+                <Badge variant="navy" size="sm">{result.book.category}</Badge>
+                {result.book.isNew && <Badge variant="info" size="sm">Baru</Badge>}
               </div>
-              <h3 className="text-base font-semibold text-ink leading-tight">{result.title}</h3>
-              <p className="text-sm text-ink-muted">{result.author} · {result.year}</p>
-              <p className="text-xs text-ink-muted/80 font-mono mt-1">{result.barcode}</p>
+              <h3 className="text-base font-semibold text-ink leading-tight">{result.book.title}</h3>
+              <p className="text-sm text-ink-muted">{result.book.author} · {result.book.year}</p>
+              <p className="text-xs text-ink-muted/80 font-mono mt-1">{result.copy.barcode} · Eks. {result.copy.copyNumber}</p>
             </div>
           </div>
 
           <div className="p-3 rounded-md border border-line bg-canvas/40 space-y-2">
-            {availableCount > 0 ? (
+            {copyAvailable ? (
               <div className="flex items-center gap-2 text-sm text-success">
                 <CheckCircle2 size={16} />
-                <span className="font-medium">Tersedia untuk dipinjam ({availableCount} eksemplar)</span>
+                <span className="font-medium">Eksemplar ini tersedia untuk dipinjam</span>
               </div>
             ) : (
-              <div className="flex items-center gap-2 text-sm text-warning">
-                <Clock size={16} />
-                <span className="font-medium">Sedang dipinjam — bisa direservasi lewat detail</span>
+              <div className="flex items-start gap-2 text-sm text-warning">
+                <Clock size={16} className="flex-shrink-0 mt-0.5" />
+                <span className="font-medium">
+                  {otherAvailable.length > 0
+                    ? `Eksemplar ini tidak dapat dipinjam — ${otherAvailable.length} eksemplar lain tersedia (Unit ${Array.from(new Set(otherAvailable.map((c) => c.unit))).join(', ')})`
+                    : 'Eksemplar ini tidak dapat dipinjam — bisa direservasi lewat detail'}
+                </span>
               </div>
             )}
             <div className="flex items-center gap-2 text-xs text-ink-muted">
               <MapPin size={14} />
-              <span>{result.copies[0].unit} · {result.copies[0].shelf} · {result.copies[0].callNumber}</span>
+              <span>{result.copy.unit} · {result.copy.shelf} · {result.copy.callNumber}</span>
             </div>
           </div>
         </div>

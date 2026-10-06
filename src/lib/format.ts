@@ -1,3 +1,21 @@
+/**
+ * Ubah string/Date menjadi Date. String tanggal saja (YYYY-MM-DD) dibaca sebagai
+ * tanggal lokal — `new Date('2026-10-06')` akan dibaca UTC dan bisa bergeser sehari.
+ */
+function toDate(date: Date | string): Date {
+  if (typeof date !== 'string') return date;
+  const m = date.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  return m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : new Date(date);
+}
+
+/** Kunci tanggal lokal YYYY-MM-DD (pengganti toISOString yang memakai UTC). */
+export function toDateKey(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
 export function formatRupiah(n: number): string {
   return 'Rp ' + n.toLocaleString('id-ID');
 }
@@ -7,7 +25,7 @@ export function formatNumber(n: number): string {
 }
 
 export function formatDate(date: Date | string): string {
-  const d = typeof date === 'string' ? new Date(date) : date;
+  const d = toDate(date);
   return d.toLocaleDateString('id-ID', {
     day: 'numeric',
     month: 'long',
@@ -16,7 +34,7 @@ export function formatDate(date: Date | string): string {
 }
 
 export function formatDateShort(date: Date | string): string {
-  const d = typeof date === 'string' ? new Date(date) : date;
+  const d = toDate(date);
   return d.toLocaleDateString('id-ID', {
     day: '2-digit',
     month: '2-digit',
@@ -25,7 +43,7 @@ export function formatDateShort(date: Date | string): string {
 }
 
 export function formatTime(date: Date | string): string {
-  const d = typeof date === 'string' ? new Date(date) : date;
+  const d = toDate(date);
   return d.toLocaleTimeString('id-ID', {
     hour: '2-digit',
     minute: '2-digit',
@@ -37,7 +55,7 @@ export function formatDateTime(date: Date | string): string {
 }
 
 export function relativeTime(date: Date | string): string {
-  const d = typeof date === 'string' ? new Date(date) : date;
+  const d = toDate(date);
   const now = new Date();
   const diff = Math.abs(now.getTime() - d.getTime());
   const minutes = Math.floor(diff / 60000);
@@ -58,6 +76,6 @@ export function addDays(date: Date, days: number): Date {
 }
 
 export function isOverdue(date: Date | string): boolean {
-  const d = typeof date === 'string' ? new Date(date) : date;
+  const d = toDate(date);
   return d.getTime() < new Date().getTime();
 }

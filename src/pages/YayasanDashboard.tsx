@@ -12,7 +12,7 @@ import { Select } from '@/components/ui/Input';
 import { LineChart, BarChartH, DonutChart } from '@/components/Charts';
 import { Drawer } from '@/components/ui/Drawer';
 import {
-  YAYASAN_METRICS, ANGGOTA_BREAKDOWN, DIPINJAM_BREAKDOWN, TERLAMBU_BREAKDOWN,
+  YAYASAN_METRICS, ANGGOTA_BREAKDOWN, DIPINJAM_BREAKDOWN, TERLAMBAT_BREAKDOWN,
   SELISIH_BREAKDOWN, ATTENTION_ITEMS, TREND_PINJAMAN, AKTIVITAS_UNIT,
   CATEGORY_COMPOSITION,
 } from '@/lib/data';
@@ -24,13 +24,12 @@ interface YayasanDashboardProps {
   activeUnit: Unit;
   route: string;
   navigate: (path: string) => void;
-  onChangeRole: (r: Role) => void;
   onLogout: () => void;
   notify: (type: 'success' | 'warning' | 'error' | 'info', title: string, message?: string) => void;
 }
 
 export function YayasanDashboard({
-  role, activeUnit, route, navigate, onChangeRole, onLogout, notify,
+  role, activeUnit, route, navigate, onLogout, notify,
 }: YayasanDashboardProps) {
   const [unitFilter, setUnitFilter] = useState<string>('SEMUA');
   const [period, setPeriod] = useState('bulan-ini');
@@ -55,7 +54,6 @@ export function YayasanDashboard({
       activeUnit={activeUnit}
       route={route}
       navigate={navigate}
-      onChangeRole={onChangeRole}
       onLogout={onLogout}
       pageTitle="Ringkasan Yayasan"
       breadcrumbs={[{ label: 'Manajemen Yayasan' }, { label: 'Ringkasan' }]}
@@ -132,7 +130,7 @@ export function YayasanDashboard({
           label="Terlambat"
           value={YAYASAN_METRICS.terlambat}
           icon={<AlertTriangle size={20} />}
-          breakdown={TERLAMBU_BREAKDOWN}
+          breakdown={TERLAMBAT_BREAKDOWN}
           variant="warning"
           onClick={() => handleMetricClick('Terlambat')}
         />

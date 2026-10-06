@@ -104,8 +104,8 @@ export default {
           '100%': { backgroundPosition: '200% 0' },
         },
         'toast-in': {
-          '0%': { opacity: '0', transform: 'translateX(20px)' },
-          '100%': { opacity: '1', transform: 'translateX(0)' },
+          '0%': { opacity: '0', transform: 'translateY(12px)' },
+          '100%': { opacity: '1', transform: 'translateY(0)' },
         },
         'scan-line': {
           '0%': { top: '10%' },

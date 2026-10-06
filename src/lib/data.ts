@@ -1,9 +1,11 @@
-import type { Book, Member, AttentionItem, ActivityItem, MetricBreakdown } from '@/types';
+import { addDays, toDateKey } from '@/lib/format';
+import { generateCatalog, CATEGORY_ICONS } from '@/lib/catalog';
+import type { Book, BookCopy, Member, AttentionItem, ActivityItem, MetricBreakdown } from '@/types';
 
-export const BOOKS: Book[] = [
+// Koleksi kurasi — dipakai langsung oleh skenario demo (pinjaman, tugas pustakawan, contoh barcode).
+const CURATED_BOOKS: Book[] = [
   {
     id: 'bk-001',
-    barcode: 'BK-SD-000328',
     title: 'Petualangan di Hutan Tropis',
     author: 'Maya Anggraini',
     publisher: 'Pustaka Cendekia',
@@ -15,16 +17,15 @@ export const BOOKS: Book[] = [
       'Sebuah kisah petualangan lima sahabat yang tersesat di hutan tropis Kalimantan. Mereka belajar tentang keberanian, persahabatan, dan pentingnya menjaga alam.',
     coverHue: 145,
     copies: [
-      { unit: 'SD', shelf: 'Rak A-03', callNumber: '899.221/MAY/p', status: 'tersedia', copyNumber: 1 },
-      { unit: 'SD', shelf: 'Rak A-03', callNumber: '899.221/MAY/p', status: 'tersedia', copyNumber: 2 },
-      { unit: 'SMP', shelf: 'Rak B-07', callNumber: '899.221/MAY/p', status: 'dipinjam', copyNumber: 1 },
+      { barcode: 'BK-SD-000328', unit: 'SD', shelf: 'Rak A-03', callNumber: '899.221/MAY/p', status: 'tersedia', copyNumber: 1 },
+      { barcode: 'BK-SD-000329', unit: 'SD', shelf: 'Rak A-03', callNumber: '899.221/MAY/p', status: 'dipinjam', copyNumber: 2 },
+      { barcode: 'BK-SMP-000214', unit: 'SMP', shelf: 'Rak B-07', callNumber: '899.221/MAY/p', status: 'dipinjam', copyNumber: 1 },
     ],
     popular: true,
     isNew: false,
   },
   {
     id: 'bk-002',
-    barcode: 'BK-SD-000517',
     title: 'Ensiklopedia Sains Dasar',
     author: 'Tim Edukasi Nusantara',
     publisher: 'Erlangga Pendidikan',
@@ -36,16 +37,15 @@ export const BOOKS: Book[] = [
       'Buku referensi sains untuk SD yang membahas biologi, fisika, dan kimia dengan bahasa sederhana dan ilustrasi menarik.',
     coverHue: 210,
     copies: [
-      { unit: 'SD', shelf: 'Rak C-01', callNumber: '503/TIM/e', status: 'tersedia', copyNumber: 1 },
-      { unit: 'SMP', shelf: 'Rak C-03', callNumber: '503/TIM/e', status: 'tersedia', copyNumber: 1 },
-      { unit: 'SMA', shelf: 'Rak C-05', callNumber: '503/TIM/e', status: 'tersedia', copyNumber: 1 },
+      { barcode: 'BK-SD-000517', unit: 'SD', shelf: 'Rak C-01', callNumber: '503/TIM/e', status: 'dipinjam', copyNumber: 1 },
+      { barcode: 'BK-SMP-000226', unit: 'SMP', shelf: 'Rak C-03', callNumber: '503/TIM/e', status: 'tersedia', copyNumber: 1 },
+      { barcode: 'BK-SMA-000118', unit: 'SMA', shelf: 'Rak C-05', callNumber: '503/TIM/e', status: 'tersedia', copyNumber: 1 },
     ],
     popular: false,
     isNew: true,
   },
   {
     id: 'bk-003',
-    barcode: 'BK-SD-000219',
     title: 'Jejak Peradaban Nusantara',
     author: 'Dr. Hendra Wijaya',
     publisher: 'Media Akademika',
@@ -57,16 +57,15 @@ export const BOOKS: Book[] = [
       'Penelusuran jejak peradaban Nusantara dari era kerajaan hingga masa kemerdekaan, lengkap dengan peta dan dokumen sejarah.',
     coverHue: 30,
     copies: [
-      { unit: 'SD', shelf: 'Rak D-02', callNumber: '959/WIJ/j', status: 'dipinjam', copyNumber: 1 },
-      { unit: 'SMP', shelf: 'Rak D-04', callNumber: '959/WIJ/j', status: 'tersedia', copyNumber: 1 },
-      { unit: 'SMA', shelf: 'Rak D-06', callNumber: '959/WIJ/j', status: 'direservasi', copyNumber: 1 },
+      { barcode: 'BK-SD-000219', unit: 'SD', shelf: 'Rak D-02', callNumber: '959/WIJ/j', status: 'dipinjam', copyNumber: 1 },
+      { barcode: 'BK-SMP-000231', unit: 'SMP', shelf: 'Rak D-04', callNumber: '959/WIJ/j', status: 'tersedia', copyNumber: 1 },
+      { barcode: 'BK-SMA-000096', unit: 'SMA', shelf: 'Rak D-06', callNumber: '959/WIJ/j', status: 'direservasi', copyNumber: 1 },
     ],
     popular: true,
     isNew: false,
   },
   {
     id: 'bk-004',
-    barcode: 'BK-SMP-000104',
     title: 'Matematika Terapan untuk SMP',
     author: 'Sri Wahyuni',
     publisher: 'Grafindo Litera',
@@ -78,16 +77,15 @@ export const BOOKS: Book[] = [
       'Pembahasan matematika SMP dengan pendekatan kontekstual, soal latihan bertingkat, dan kunci jawaban lengkap.',
     coverHue: 280,
     copies: [
-      { unit: 'SMP', shelf: 'Rak E-01', callNumber: '510/WAH/m', status: 'tersedia', copyNumber: 1 },
-      { unit: 'SMP', shelf: 'Rak E-01', callNumber: '510/WAH/m', status: 'tersedia', copyNumber: 2 },
-      { unit: 'SMP', shelf: 'Rak E-01', callNumber: '510/WAH/m', status: 'dipinjam', copyNumber: 3 },
+      { barcode: 'BK-SMP-000104', unit: 'SMP', shelf: 'Rak E-01', callNumber: '510/WAH/m', status: 'tersedia', copyNumber: 1 },
+      { barcode: 'BK-SMP-000105', unit: 'SMP', shelf: 'Rak E-01', callNumber: '510/WAH/m', status: 'tersedia', copyNumber: 2 },
+      { barcode: 'BK-SMP-000106', unit: 'SMP', shelf: 'Rak E-01', callNumber: '510/WAH/m', status: 'dipinjam', copyNumber: 3 },
     ],
     popular: false,
     isNew: true,
   },
   {
     id: 'bk-005',
-    barcode: 'BK-SMA-000087',
     title: 'Pengantar Filsafat Modern',
     author: 'Prof. Bambang Soelistyo',
     publisher: 'Pustaka Filsafat',
@@ -99,15 +97,14 @@ export const BOOKS: Book[] = [
       'Telaah pemikiran filsuf modern dari Descartes hingga Kant, dengan kaitan terhadap perkembangan ilmu pengetahuan kontemporer.',
     coverHue: 350,
     copies: [
-      { unit: 'SMA', shelf: 'Rak F-03', callNumber: '190/SOE/p', status: 'tidak-dapat-dipinjam', copyNumber: 1 },
-      { unit: 'SMA', shelf: 'Rak F-03', callNumber: '190/SOE/p', status: 'tersedia', copyNumber: 2 },
+      { barcode: 'BK-SMA-000087', unit: 'SMA', shelf: 'Rak F-03', callNumber: '190/SOE/p', status: 'tidak-dapat-dipinjam', copyNumber: 1 },
+      { barcode: 'BK-SMA-000088', unit: 'SMA', shelf: 'Rak F-03', callNumber: '190/SOE/p', status: 'tersedia', copyNumber: 2 },
     ],
     popular: false,
     isNew: false,
   },
   {
     id: 'bk-006',
-    barcode: 'BK-SMA-000142',
     title: 'Biologi Sel dan Molekuler',
     author: 'Dr. Sari Pranata',
     publisher: 'Medika Edukasi',
@@ -119,16 +116,15 @@ export const BOOKS: Book[] = [
       'Buku ajar biologi SMA yang membahas struktur sel, genetika molekuler, dan bioteknologi dengan diagram berkualitas tinggi.',
     coverHue: 95,
     copies: [
-      { unit: 'SMA', shelf: 'Rak G-02', callNumber: '571.6/PRA/b', status: 'tersedia', copyNumber: 1 },
-      { unit: 'SMA', shelf: 'Rak G-02', callNumber: '571.6/PRA/b', status: 'tersedia', copyNumber: 2 },
-      { unit: 'SMA', shelf: 'Rak G-02', callNumber: '571.6/PRA/b', status: 'dipinjam', copyNumber: 3 },
+      { barcode: 'BK-SMA-000142', unit: 'SMA', shelf: 'Rak G-02', callNumber: '571.6/PRA/b', status: 'tersedia', copyNumber: 1 },
+      { barcode: 'BK-SMA-000143', unit: 'SMA', shelf: 'Rak G-02', callNumber: '571.6/PRA/b', status: 'tersedia', copyNumber: 2 },
+      { barcode: 'BK-SMA-000144', unit: 'SMA', shelf: 'Rak G-02', callNumber: '571.6/PRA/b', status: 'dipinjam', copyNumber: 3 },
     ],
     popular: true,
     isNew: true,
   },
   {
     id: 'bk-007',
-    barcode: 'BK-SMP-000188',
     title: 'Kumpulan Puisi: Jejak Hujan',
     author: 'Reni Marlina',
     publisher: 'Sastra Kita',
@@ -140,16 +136,15 @@ export const BOOKS: Book[] = [
       'Antologi puisi yang mengangkat tema alam, keluarga, dan harapan, cocok untuk pembaca SMP dan SMA.',
     coverHue: 175,
     copies: [
-      { unit: 'SD', shelf: 'Rak A-06', callNumber: '811/MAR/j', status: 'tersedia', copyNumber: 1 },
-      { unit: 'SMP', shelf: 'Rak B-05', callNumber: '811/MAR/j', status: 'tersedia', copyNumber: 1 },
-      { unit: 'SMA', shelf: 'Rak F-08', callNumber: '811/MAR/j', status: 'dipinjam', copyNumber: 1 },
+      { barcode: 'BK-SD-000655', unit: 'SD', shelf: 'Rak A-06', callNumber: '811/MAR/j', status: 'tersedia', copyNumber: 1 },
+      { barcode: 'BK-SMP-000188', unit: 'SMP', shelf: 'Rak B-05', callNumber: '811/MAR/j', status: 'tersedia', copyNumber: 1 },
+      { barcode: 'BK-SMA-000167', unit: 'SMA', shelf: 'Rak F-08', callNumber: '811/MAR/j', status: 'dipinjam', copyNumber: 1 },
     ],
     popular: false,
     isNew: false,
   },
   {
     id: 'bk-008',
-    barcode: 'BK-SMA-000203',
     title: 'Ekonomi Makro: Teori dan Praktik',
     author: 'Ahmad Fauzi',
     publisher: 'Ekonomi Press',
@@ -161,12 +156,20 @@ export const BOOKS: Book[] = [
       'Pengantar ekonomi makro untuk SMA, mencakup inflasi, pertumbuhan ekonomi, dan kebijakan moneter dengan studi kasus Indonesia.',
     coverHue: 55,
     copies: [
-      { unit: 'SMA', shelf: 'Rak H-01', callNumber: '339/FAU/e', status: 'tersedia', copyNumber: 1 },
-      { unit: 'SMA', shelf: 'Rak H-01', callNumber: '339/FAU/e', status: 'direservasi', copyNumber: 2 },
+      { barcode: 'BK-SMA-000203', unit: 'SMA', shelf: 'Rak H-01', callNumber: '339/FAU/e', status: 'tersedia', copyNumber: 1 },
+      { barcode: 'BK-SMA-000204', unit: 'SMA', shelf: 'Rak H-01', callNumber: '339/FAU/e', status: 'direservasi', copyNumber: 2 },
     ],
     popular: false,
     isNew: false,
   },
+];
+
+/** Jumlah judul tambahan yang dibangkitkan otomatis (deterministik, lihat catalog.ts). */
+const GENERATED_COUNT = 1000;
+
+export const BOOKS: Book[] = [
+  ...CURATED_BOOKS,
+  ...generateCatalog({ count: GENERATED_COUNT, reservedTitles: CURATED_BOOKS.map((b) => b.title) }),
 ];
 
 export const MEMBERS: Member[] = [
@@ -175,8 +178,8 @@ export const MEMBERS: Member[] = [
     name: 'Aulia Rahma',
     unit: 'SD',
     status: 'aktif',
-    activeLoans: 2,
-    overdueCount: 0,
+    activeLoans: 3,
+    overdueCount: 1,
     restriction: undefined,
     avatarHue: 145,
     joinedDate: '2023-07-15',
@@ -199,7 +202,7 @@ export const MEMBERS: Member[] = [
     name: 'Citra Dewanti',
     unit: 'SMA',
     status: 'diblokir',
-    activeLoans: 1,
+    activeLoans: 2,
     overdueCount: 2,
     restriction: 'Diblokir karena 2 peminjaman terlambat belum dikembalikan',
     avatarHue: 350,
@@ -243,7 +246,7 @@ export const YAYASAN_METRICS = {
 
 export const ANGGOTA_BREAKDOWN: MetricBreakdown = { SD: 820, SMP: 560, SMA: 466 };
 export const DIPINJAM_BREAKDOWN: MetricBreakdown = { SD: 148, SMP: 101, SMA: 77 };
-export const TERLAMBU_BREAKDOWN: MetricBreakdown = { SD: 8, SMP: 6, SMA: 4 };
+export const TERLAMBAT_BREAKDOWN: MetricBreakdown = { SD: 8, SMP: 6, SMA: 4 };
 export const SELISIH_BREAKDOWN: MetricBreakdown = { SD: 1, SMP: 5, SMA: 1 };
 
 export const ATTENTION_ITEMS: AttentionItem[] = [
@@ -340,25 +343,22 @@ export const ACTIVITY_ITEMS: ActivityItem[] = [
   },
 ];
 
-export const POPULAR_CATEGORIES = [
-  { name: 'Fiksi Petualangan', icon: 'Compass', count: 1240 },
-  { name: 'Sains', icon: 'Atom', count: 1690 },
-  { name: 'Sejarah', icon: 'Scroll', count: 1260 },
-  { name: 'Matematika', icon: 'Calculator', count: 820 },
-  { name: 'Biologi', icon: 'Leaf', count: 540 },
-  { name: 'Puisi', icon: 'PenLine', count: 310 },
-  { name: 'Ekonomi', icon: 'TrendingUp', count: 280 },
-  { name: 'Filsafat', icon: 'BrainCircuit', count: 190 },
-];
+/** Kategori beserta jumlah judul sebenarnya di katalog, urut terbanyak. */
+export const POPULAR_CATEGORIES = Array.from(
+  BOOKS.reduce((map, b) => map.set(b.category, (map.get(b.category) ?? 0) + 1), new Map<string, number>()),
+  ([name, count]) => ({ name, icon: CATEGORY_ICONS[name] ?? 'Library', count }),
+).sort((a, b) => b.count - a.count);
 
 export const PUSTAKAWAN_TASKS = {
   dueToday: [
-    { member: 'Aulia Rahma', memberId: 'SD-000124', title: 'Petualangan di Hutan Tropis', barcode: 'BK-SD-000328', dueDate: addDaysStr(0) },
-    { member: 'Daffa Rahman', memberId: 'SD-000201', title: 'Kisah Pahlawan Indonesia', barcode: 'BK-SD-000411', dueDate: addDaysStr(0) },
+    { member: 'Aulia Rahma', memberId: 'SD-000124', title: 'Petualangan di Hutan Tropis', barcode: 'BK-SD-000329', dueDate: addDaysStr(0) },
+    { member: 'Bagus Pratama', memberId: 'SMP-000056', title: 'Matematika Terapan untuk SMP', barcode: 'BK-SMP-000106', dueDate: addDaysStr(0) },
   ],
   overdue: [
-    { member: 'Citra Dewanti', memberId: 'SMA-000031', title: 'Jejak Peradaban Nusantara', barcode: 'BK-SMA-000087', dueDate: addDaysStr(-3), daysLate: 3 },
-    { member: 'Eka Putra', memberId: 'SMP-000078', title: 'Geografi Asia Tenggara', barcode: 'BK-SMP-000156', dueDate: addDaysStr(-1), daysLate: 1 },
+    { member: 'Citra Dewanti', memberId: 'SMA-000031', title: 'Biologi Sel dan Molekuler', barcode: 'BK-SMA-000144', dueDate: addDaysStr(-5), daysLate: 5 },
+    { member: 'Aulia Rahma', memberId: 'SD-000124', title: 'Jejak Peradaban Nusantara', barcode: 'BK-SD-000219', dueDate: addDaysStr(-3), daysLate: 3 },
+    { member: 'Citra Dewanti', memberId: 'SMA-000031', title: 'Kumpulan Puisi: Jejak Hujan', barcode: 'BK-SMA-000167', dueDate: addDaysStr(-2), daysLate: 2 },
+    { member: 'Fitri Handayani', memberId: 'SMP-000041', title: 'Petualangan di Hutan Tropis', barcode: 'BK-SMP-000214', dueDate: addDaysStr(-1), daysLate: 1 },
   ],
   reservations: [
     { member: 'Citra Dewanti', memberId: 'SMA-000031', title: 'Ekonomi Makro: Teori dan Praktik', status: 'Siap Diambil' },
@@ -377,13 +377,41 @@ export const PUSTAKAWAN_TASKS = {
 };
 
 function addDaysStr(days: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() + days);
-  return d.toISOString().split('T')[0];
+  return toDateKey(addDays(new Date(), days));
+}
+
+/** Pinjaman aktif anggota demo (Aulia Rahma) — dipakai tab Pinjaman Saya & Profil di OPAC. */
+export const MEMBER_LOANS = [
+  { memberId: 'SD-000124', barcode: 'BK-SD-000517', daysOffset: 5 },  // aman
+  { memberId: 'SD-000124', barcode: 'BK-SD-000329', daysOffset: 0 },  // jatuh tempo hari ini
+  { memberId: 'SD-000124', barcode: 'BK-SD-000219', daysOffset: -3 }, // lewat jatuh tempo
+];
+
+export interface CopyMatch {
+  book: Book;
+  copy: BookCopy;
+}
+
+// Indeks barcode → eksemplar, dibangun sekali agar pencarian tetap instan di ribuan eksemplar.
+const COPY_INDEX = new Map<string, CopyMatch>(
+  BOOKS.flatMap((book) => book.copies.map((copy) => [copy.barcode.toLowerCase(), { book, copy }] as const)),
+);
+
+/** Cari eksemplar dari barcode-nya (tidak peka huruf besar/kecil, spasi diabaikan). */
+export function findCopyByBarcode(barcode: string): CopyMatch | undefined {
+  return COPY_INDEX.get(barcode.trim().toLowerCase());
 }
 
 export function findBookByBarcode(barcode: string): Book | undefined {
-  return BOOKS.find((b) => b.barcode.toLowerCase() === barcode.toLowerCase().trim());
+  return findCopyByBarcode(barcode)?.book;
+}
+
+/** Barcode contoh untuk tombol demo: satu eksemplar per judul, pilih yang tersedia bila ada. */
+export function sampleBarcodes(count: number, onlyAvailable = false): string[] {
+  return CURATED_BOOKS.flatMap((b) => {
+    const copy = b.copies.find((c) => c.status === 'tersedia') ?? (onlyAvailable ? undefined : b.copies[0]);
+    return copy ? [copy.barcode] : [];
+  }).slice(0, count);
 }
 
 export function findMemberById(id: string): Member | undefined {

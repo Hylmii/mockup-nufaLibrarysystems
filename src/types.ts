@@ -6,7 +6,6 @@ export type ToastType = 'success' | 'warning' | 'error' | 'info';
 
 export interface Book {
   id: string;
-  barcode: string;
   title: string;
   author: string;
   publisher: string;
@@ -22,6 +21,8 @@ export interface Book {
 }
 
 export interface BookCopy {
+  /** Barcode unik per eksemplar; prefiks memuat unit (BK-SD-…, BK-SMP-…, BK-SMA-…). */
+  barcode: string;
   unit: Unit;
   shelf: string;
   callNumber: string;

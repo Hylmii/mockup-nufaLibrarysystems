@@ -20,7 +20,6 @@ interface AdminPageProps {
   activeUnit: Unit;
   route: string;
   navigate: (path: string) => void;
-  onChangeRole: (r: Role) => void;
   onLogout: () => void;
   notify: Notify;
 }
@@ -35,7 +34,7 @@ const DISCREPANCIES = [
   { barcode: 'BK-SMP-000305', title: 'Kamus Bahasa Inggris', shelf: 'Rak A-01', reason: 'Barcode tidak terbaca / rusak', severity: 'warning' as const },
 ];
 
-export function InventarisPage({ role, activeUnit, route, navigate, onChangeRole, onLogout, notify }: AdminPageProps) {
+export function InventarisPage({ role, activeUnit, route, navigate, onLogout, notify }: AdminPageProps) {
   const op = PUSTAKAWAN_TASKS.stockOpname;
   const [startOpen, setStartOpen] = useState(() => route.includes('action=mulai'));
   const [sessionUnit, setSessionUnit] = useState<string | null>(null);
@@ -70,7 +69,7 @@ export function InventarisPage({ role, activeUnit, route, navigate, onChangeRole
   return (
     <AdminLayout
       role={role} activeUnit={activeUnit} route={route} navigate={navigate}
-      onChangeRole={onChangeRole} onLogout={onLogout}
+      onLogout={onLogout}
       pageTitle="Inventaris"
       breadcrumbs={[{ label: 'Pustakawan' }, { label: 'Inventaris' }]}
       pageActions={

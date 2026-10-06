@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import {
   ArrowLeft, Bookmark, CheckCircle2, Clock, MapPin, BookOpen,
-  Building2, User as UserIcon, Calendar, Hash, Languages, Library,
+  Building2, Calendar, Hash, Languages, Library,
 } from 'lucide-react';
 import { PublicLayout } from '@/components/layout/PublicLayout';
 import { BookCover } from '@/components/BookCover';
@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/Button';
 import { Badge, StatusBadge } from '@/components/ui/Badge';
 import { Dialog } from '@/components/ui/Dialog';
 import { BOOKS } from '@/lib/data';
-import type { Book, Unit } from '@/types';
+import { canGoBackInApp } from '@/lib/store';
 
 interface BookDetailProps {
   bookId: string;
@@ -50,7 +50,9 @@ export function BookDetailPage({ bookId, route, navigate, onLogout, notify }: Bo
     notify('success', 'Reservasi Berhasil', `"${book.title}" telah direservasi. Anda akan mendapat notifikasi saat buku tersedia.`);
   };
 
-  const canReserve = book.copies.some((c) => c.status !== 'tersedia' && c.status !== 'tidak-dapat-dipinjam');
+  // Reservasi hanya masuk akal untuk eksemplar yang sedang beredar (dipinjam/direservasi),
+  // bukan untuk koleksi referensi yang memang tidak dapat dipinjam.
+  const canReserve = book.copies.some((c) => c.status === 'dipinjam' || c.status === 'direservasi');
 
   return (
     <PublicLayout route={route} navigate={navigate} onLogout={onLogout}>
@@ -65,10 +67,15 @@ export function BookDetailPage({ bookId, route, navigate, onLogout, notify }: Bo
         </nav>
 
         <button
-          onClick={() => navigate('/opac?tab=cari')}
+          onClick={() => {
+            // Kembali ke halaman sebelumnya (hasil pencarian, beranda, dsb.) agar kata kunci
+            // & filter tetap utuh. Dibuka langsung dari tautan → ke katalog.
+            if (canGoBackInApp()) window.history.back();
+            else navigate('/opac?tab=cari');
+          }}
           className="flex items-center gap-1.5 text-sm text-ink-muted hover:text-ink mb-6 transition-colors"
         >
-          <ArrowLeft size={16} /> Kembali ke hasil pencarian
+          <ArrowLeft size={16} /> Kembali
         </button>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8">
@@ -111,7 +118,7 @@ export function BookDetailPage({ bookId, route, navigate, onLogout, notify }: Bo
                   variant={availableCopies.length > 0 ? 'secondary' : 'primary'}
                   icon={<Bookmark size={18} />}
                   onClick={() => setReserveOpen(true)}
-                  disabled={!canReserve && availableCopies.length > 0}
+                  disabled={!canReserve}
                 >
                   {availableCopies.length > 0 ? 'Reservasi Buku' : 'Reservasi Sekarang'}
                 </Button>
